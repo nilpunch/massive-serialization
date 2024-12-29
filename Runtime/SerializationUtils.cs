@@ -75,10 +75,10 @@ namespace Massive.Serialization
 			var underlyingType = pagedArray.ElementType.IsEnum ? Enum.GetUnderlyingType(pagedArray.ElementType) : pagedArray.ElementType;
 			var sizeOfItem = Marshal.SizeOf(underlyingType);
 
-			foreach (var (pageIndex, pageLength, _) in new PageSequence(pagedArray.PageSize, count))
+			foreach (var page in new PageSequence(pagedArray.PageSize, count))
 			{
-				var handle = GCHandle.Alloc(pagedArray.GetPage(pageIndex), GCHandleType.Pinned);
-				var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), pageLength * sizeOfItem);
+				var handle = GCHandle.Alloc(pagedArray.GetPage(page.Index), GCHandleType.Pinned);
+				var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), page.Length * sizeOfItem);
 				stream.Write(pageAsSpan);
 				handle.Free();
 			}
@@ -89,12 +89,12 @@ namespace Massive.Serialization
 			var underlyingType = pagedArray.ElementType.IsEnum ? Enum.GetUnderlyingType(pagedArray.ElementType) : pagedArray.ElementType;
 			var sizeOfItem = Marshal.SizeOf(underlyingType);
 
-			foreach (var (pageIndex, pageLength, _) in new PageSequence(pagedArray.PageSize, count))
+			foreach (var page in new PageSequence(pagedArray.PageSize, count))
 			{
-				pagedArray.EnsurePage(pageIndex);
+				pagedArray.EnsurePage(page.Index);
 
-				var handle = GCHandle.Alloc(pagedArray.GetPage(pageIndex), GCHandleType.Pinned);
-				var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), pageLength * sizeOfItem);
+				var handle = GCHandle.Alloc(pagedArray.GetPage(page.Index), GCHandleType.Pinned);
+				var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), page.Length * sizeOfItem);
 				stream.Read(pageAsSpan);
 				handle.Free();
 			}
@@ -105,9 +105,9 @@ namespace Massive.Serialization
 			var binaryFormatter = new BinaryFormatter();
 			var buffer = Array.CreateInstance(pagedArray.ElementType, count);
 
-			foreach (var (pageIndex, pageLength, indexOffset) in new PageSequence(pagedArray.PageSize, count))
+			foreach (var page in new PageSequence(pagedArray.PageSize, count))
 			{
-				Array.Copy(pagedArray.GetPage(pageIndex), 0, buffer, indexOffset, pageLength);
+				Array.Copy(pagedArray.GetPage(page.Index), 0, buffer, page.Offset, page.Length);
 			}
 
 			binaryFormatter.Serialize(stream, buffer);
@@ -118,10 +118,10 @@ namespace Massive.Serialization
 			var binaryFormatter = new BinaryFormatter();
 			var buffer = (Array)binaryFormatter.Deserialize(stream);
 
-			foreach (var (pageIndex, pageLength, indexOffset) in new PageSequence(pagedArray.PageSize, count))
+			foreach (var page in new PageSequence(pagedArray.PageSize, count))
 			{
-				pagedArray.EnsurePage(pageIndex);
-				Array.Copy(buffer, indexOffset, pagedArray.GetPage(pageIndex), 0, pageLength);
+				pagedArray.EnsurePage(page.Index);
+				Array.Copy(buffer, page.Offset, pagedArray.GetPage(page.Index), 0, page.Length);
 			}
 		}
 
