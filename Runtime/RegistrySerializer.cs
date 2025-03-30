@@ -13,16 +13,16 @@ namespace Massive.Serialization
 			_customSerializers[type] = dataSerializer;
 		}
 
-		public void Serialize(Registry registry, Stream stream)
+		public void Serialize(World world, Stream stream)
 		{
 			// Entities
-			SerializationUtils.WriteEntities(registry.Entities, stream);
+			SerializationUtils.WriteEntities(world.Entities, stream);
 
 			// Sets
-			SerializationUtils.WriteInt(registry.SetRegistry.All.Count, stream);
-			foreach (var sparseSet in registry.SetRegistry.All)
+			SerializationUtils.WriteInt(world.SetRegistry.All.Count, stream);
+			foreach (var sparseSet in world.SetRegistry.All)
 			{
-				var setKey = registry.SetRegistry.GetKey(sparseSet);
+				var setKey = world.SetRegistry.GetKey(sparseSet);
 				SerializationUtils.WriteType(setKey, stream);
 				SerializationUtils.WriteSparseSet(sparseSet, stream);
 
@@ -49,7 +49,7 @@ namespace Massive.Serialization
 
 			// Groups
 			var syncedGroups = new List<Group>();
-			foreach (var group in registry.GroupRegistry.All)
+			foreach (var group in world.GroupRegistry.All)
 			{
 				if (group.IsSynced)
 				{
@@ -66,7 +66,7 @@ namespace Massive.Serialization
 				SerializationUtils.WriteInt(included.Length, stream);
 				foreach (var set in included)
 				{
-					var setKey = registry.SetRegistry.GetKey(set);
+					var setKey = world.SetRegistry.GetKey(set);
 					SerializationUtils.WriteType(setKey, stream);
 				}
 
@@ -74,7 +74,7 @@ namespace Massive.Serialization
 				SerializationUtils.WriteInt(excluded.Length, stream);
 				foreach (var set in excluded)
 				{
-					var setKey = registry.SetRegistry.GetKey(set);
+					var setKey = world.SetRegistry.GetKey(set);
 					SerializationUtils.WriteType(setKey, stream);
 				}
 
@@ -82,10 +82,10 @@ namespace Massive.Serialization
 			}
 		}
 
-		public void Deserialize(Registry registry, Stream stream)
+		public void Deserialize(World world, Stream stream)
 		{
 			// Entities
-			SerializationUtils.ReadEntities(registry.Entities, stream);
+			SerializationUtils.ReadEntities(world.Entities, stream);
 
 			// Sets
 			var deserializedSets = new HashSet<SparseSet>();
@@ -94,7 +94,7 @@ namespace Massive.Serialization
 			{
 				var setKey = SerializationUtils.ReadType(stream);
 
-				var sparseSet = registry.SetRegistry.GetReflected(setKey);
+				var sparseSet = world.SetRegistry.GetReflected(setKey);
 				deserializedSets.Add(sparseSet);
 
 				SerializationUtils.ReadSparseSet(sparseSet, stream);
@@ -120,7 +120,7 @@ namespace Massive.Serialization
 				}
 			}
 			// Clear all remaining sets
-			foreach (var sparseSet in registry.SetRegistry.All)
+			foreach (var sparseSet in world.SetRegistry.All)
 			{
 				if (!deserializedSets.Contains(sparseSet))
 				{
@@ -137,23 +137,23 @@ namespace Massive.Serialization
 				var included = new SparseSet[SerializationUtils.ReadInt(stream)];
 				for (var i = 0; i < included.Length; i++)
 				{
-					included[i] = registry.SetRegistry.GetReflected(SerializationUtils.ReadType(stream));
+					included[i] = world.SetRegistry.GetReflected(SerializationUtils.ReadType(stream));
 				}
 
 				// Excluded
 				var excluded = new SparseSet[SerializationUtils.ReadInt(stream)];
 				for (var i = 0; i < excluded.Length; i++)
 				{
-					excluded[i] = registry.SetRegistry.GetReflected(SerializationUtils.ReadType(stream));
+					excluded[i] = world.SetRegistry.GetReflected(SerializationUtils.ReadType(stream));
 				}
 
-				var group = registry.Group(included, excluded);
+				var group = world.Group(included, excluded);
 				deserializedGroups.Add(group);
 
 				SerializationUtils.ReadSparseSet(group.Set, stream);
 			}
 			// Desync all remaining groups
-			foreach (var group in registry.GroupRegistry.All)
+			foreach (var group in world.GroupRegistry.All)
 			{
 				if (!deserializedGroups.Contains(group))
 				{

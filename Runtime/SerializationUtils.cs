@@ -41,6 +41,7 @@ namespace Massive.Serialization
 		{
 			var state = set.CurrentState;
 			WriteInt(state.Count, stream);
+			WriteInt(state.UsedIds, stream);
 			WriteInt(state.NextHole, stream);
 			WriteByte((byte)state.Packing, stream);
 
@@ -53,6 +54,7 @@ namespace Massive.Serialization
 		public static void ReadSparseSet(SparseSet set, Stream stream)
 		{
 			set.CurrentState = new SparseSet.State(
+				ReadInt(stream),
 				ReadInt(stream),
 				ReadInt(stream),
 				(Packing)ReadByte(stream));
@@ -100,6 +102,30 @@ namespace Massive.Serialization
 			}
 		}
 
+		public static unsafe void WriteUnmanagedArray(Array array, int count, Stream stream)
+		{
+			var elementType = array.GetType().GetElementType()!;
+			var underlyingType = elementType.IsEnum ? Enum.GetUnderlyingType(elementType) : elementType;
+			var sizeOfItem = Marshal.SizeOf(underlyingType);
+
+			var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
+			var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), count * sizeOfItem);
+			stream.Write(pageAsSpan);
+			handle.Free();
+		}
+
+		public static unsafe void ReadUnmanagedArray(Array array, int count, Stream stream)
+		{
+			var elementType = array.GetType().GetElementType()!;
+			var underlyingType = elementType.IsEnum ? Enum.GetUnderlyingType(elementType) : elementType;
+			var sizeOfItem = Marshal.SizeOf(underlyingType);
+
+			var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
+			var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), count * sizeOfItem);
+			stream.Read(pageAsSpan);
+			handle.Free();
+		}
+
 		public static void WriteManagedPagedArray(IPagedArray pagedArray, int count, Stream stream)
 		{
 			var binaryFormatter = new BinaryFormatter();
@@ -123,6 +149,24 @@ namespace Massive.Serialization
 				pagedArray.EnsurePage(page.Index);
 				Array.Copy(buffer, page.Offset, pagedArray.GetPage(page.Index), 0, page.Length);
 			}
+		}
+
+		public static void WriteManagedArray(Array array, int count, Stream stream)
+		{
+			var binaryFormatter = new BinaryFormatter();
+			var buffer = Array.CreateInstance(array.GetType().GetElementType()!, count);
+
+			Array.Copy(array, buffer, count);
+
+			binaryFormatter.Serialize(stream, buffer);
+		}
+
+		public static void ReadManagedArray(Array array, int count, Stream stream)
+		{
+			var binaryFormatter = new BinaryFormatter();
+			var buffer = (Array)binaryFormatter.Deserialize(stream);
+
+			Array.Copy(buffer, array, count);
 		}
 
 		public static void WriteInt(int value, Stream stream)

@@ -12,7 +12,7 @@ namespace Massive.Samples.Serialization
 
 		static void Main()
 		{
-			var registry = new Registry();
+			var registry = new World();
 
 			PopulateEntitiesAndComponents(registry);
 
@@ -30,7 +30,7 @@ namespace Massive.Samples.Serialization
 
 			// Load registry from the file.
 			// It is important to use a serializer with the same configuration as for saving
-			var savedRegistry = new Registry();
+			var savedRegistry = new World();
 			using (FileStream stream = new FileStream(PathToSaveFile, FileMode.Open, FileAccess.Read))
 			{
 				registrySerializer.Deserialize(savedRegistry, stream);
@@ -39,13 +39,13 @@ namespace Massive.Samples.Serialization
 			// Done, use your registry as you wish
 		}
 
-		private static void PopulateEntitiesAndComponents(Registry registry)
+		private static void PopulateEntitiesAndComponents(World world)
 		{
 			for (int i = 0; i < 10; ++i)
 			{
-				var playerEntity = registry.Create<Player>();
-				registry.Assign(playerEntity, new Health() { Value = 5 + i });
-				registry.Assign(playerEntity, new Inventory()
+				var playerEntity = world.Create<Player>();
+				world.Assign(playerEntity, new Health() { Value = 5 + i });
+				world.Assign(playerEntity, new Inventory()
 				{
 					Items = new List<int>()
 					{
@@ -56,8 +56,8 @@ namespace Massive.Samples.Serialization
 
 			for (int i = 0; i < 5; ++i)
 			{
-				var enemyEntity = registry.Create<Enemy>();
-				registry.Assign(enemyEntity, new Health() { Value = 1 + i });
+				var enemyEntity = world.Create<Enemy>();
+				world.Assign(enemyEntity, new Health() { Value = 1 + i });
 			}
 		}
 	}
