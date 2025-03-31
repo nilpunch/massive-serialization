@@ -44,8 +44,8 @@ namespace Massive.Samples.Serialization
 			for (int i = 0; i < 10; ++i)
 			{
 				var playerEntity = world.Create<Player>();
-				world.Assign(playerEntity, new Health() { Value = 5 + i });
-				world.Assign(playerEntity, new Inventory()
+				world.Set(playerEntity, new Health() { Value = 5 + i });
+				world.Set(playerEntity, new Inventory()
 				{
 					Items = new List<int>()
 					{
@@ -57,7 +57,7 @@ namespace Massive.Samples.Serialization
 			for (int i = 0; i < 5; ++i)
 			{
 				var enemyEntity = world.Create<Enemy>();
-				world.Assign(enemyEntity, new Health() { Value = 1 + i });
+				world.Set(enemyEntity, new Health() { Value = 1 + i });
 			}
 		}
 	}

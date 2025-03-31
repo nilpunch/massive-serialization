@@ -22,8 +22,8 @@ namespace Massive.Serialization
 			SerializationUtils.WriteInt(world.SetRegistry.All.Count, stream);
 			foreach (var sparseSet in world.SetRegistry.All)
 			{
-				var setKey = world.SetRegistry.GetKey(sparseSet);
-				SerializationUtils.WriteType(setKey, stream);
+				var setType = world.SetRegistry.TypeOf(sparseSet);
+				SerializationUtils.WriteType(setType, stream);
 				SerializationUtils.WriteSparseSet(sparseSet, stream);
 
 				if (sparseSet is not IDataSet dataSet)
@@ -31,7 +31,7 @@ namespace Massive.Serialization
 					continue;
 				}
 
-				if (_customSerializers.TryGetValue(setKey, out var customSerializer))
+				if (_customSerializers.TryGetValue(setType, out var customSerializer))
 				{
 					customSerializer.Write(dataSet.Data, sparseSet.Count, stream);
 					continue;
@@ -66,16 +66,16 @@ namespace Massive.Serialization
 				SerializationUtils.WriteInt(included.Length, stream);
 				foreach (var set in included)
 				{
-					var setKey = world.SetRegistry.GetKey(set);
-					SerializationUtils.WriteType(setKey, stream);
+					var setType = world.SetRegistry.TypeOf(set);
+					SerializationUtils.WriteType(setType, stream);
 				}
 
 				// Excluded
 				SerializationUtils.WriteInt(excluded.Length, stream);
 				foreach (var set in excluded)
 				{
-					var setKey = world.SetRegistry.GetKey(set);
-					SerializationUtils.WriteType(setKey, stream);
+					var setType = world.SetRegistry.TypeOf(set);
+					SerializationUtils.WriteType(setType, stream);
 				}
 
 				SerializationUtils.WriteSparseSet(group.Set, stream);
