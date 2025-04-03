@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
@@ -75,7 +77,7 @@ namespace Massive.Serialization
 		public static unsafe void WriteUnmanagedPagedArray(IPagedArray pagedArray, int count, Stream stream)
 		{
 			var underlyingType = pagedArray.ElementType.IsEnum ? Enum.GetUnderlyingType(pagedArray.ElementType) : pagedArray.ElementType;
-			var sizeOfItem = Marshal.SizeOf(underlyingType);
+			var sizeOfItem = SizeOfUnmanaged(underlyingType);
 
 			foreach (var page in new PageSequence(pagedArray.PageSize, count))
 			{
@@ -89,7 +91,7 @@ namespace Massive.Serialization
 		public static unsafe void ReadUnmanagedPagedArray(IPagedArray pagedArray, int count, Stream stream)
 		{
 			var underlyingType = pagedArray.ElementType.IsEnum ? Enum.GetUnderlyingType(pagedArray.ElementType) : pagedArray.ElementType;
-			var sizeOfItem = Marshal.SizeOf(underlyingType);
+			var sizeOfItem = SizeOfUnmanaged(underlyingType);
 
 			foreach (var page in new PageSequence(pagedArray.PageSize, count))
 			{
@@ -106,7 +108,7 @@ namespace Massive.Serialization
 		{
 			var elementType = array.GetType().GetElementType()!;
 			var underlyingType = elementType.IsEnum ? Enum.GetUnderlyingType(elementType) : elementType;
-			var sizeOfItem = Marshal.SizeOf(underlyingType);
+			var sizeOfItem = SizeOfUnmanaged(underlyingType);
 
 			var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
 			var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), count * sizeOfItem);
@@ -118,7 +120,7 @@ namespace Massive.Serialization
 		{
 			var elementType = array.GetType().GetElementType()!;
 			var underlyingType = elementType.IsEnum ? Enum.GetUnderlyingType(elementType) : elementType;
-			var sizeOfItem = Marshal.SizeOf(underlyingType);
+			var sizeOfItem = SizeOfUnmanaged(underlyingType);
 
 			var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
 			var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), count * sizeOfItem);
@@ -229,6 +231,31 @@ namespace Massive.Serialization
 
 			var typeName = Encoding.UTF8.GetString(nameBuffer);
 			return Type.GetType(typeName, true);
+		}
+
+		private static readonly Dictionary<Type, int> s_sizeOfCache = new Dictionary<Type, int>();
+
+		private unsafe static int SizeOf<T>() where T : unmanaged => sizeof(T);
+
+		public static int SizeOfUnmanaged(Type t)
+		{
+			if (!s_sizeOfCache.TryGetValue(t, out var size))
+			{
+				if (t.IsGenericType)
+				{
+					var genericMethod = typeof(SerializationUtils)
+						.GetMethod(nameof(SizeOf), BindingFlags.Static | BindingFlags.NonPublic)
+						.MakeGenericMethod(t);
+					size = (int)genericMethod.Invoke(null, new object[] { });
+				}
+				else
+				{
+					size = Marshal.SizeOf(t);
+				}
+				s_sizeOfCache.Add(t, size);
+			}
+
+			return size;
 		}
 	}
 }
