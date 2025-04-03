@@ -241,17 +241,10 @@ namespace Massive.Serialization
 		{
 			if (!s_sizeOfCache.TryGetValue(t, out var size))
 			{
-				if (t.IsGenericType)
-				{
-					var genericMethod = typeof(SerializationUtils)
-						.GetMethod(nameof(SizeOf), BindingFlags.Static | BindingFlags.NonPublic)
-						.MakeGenericMethod(t);
-					size = (int)genericMethod.Invoke(null, new object[] { });
-				}
-				else
-				{
-					size = Marshal.SizeOf(t);
-				}
+				var genericMethod = typeof(SerializationUtils)
+					.GetMethod(nameof(SizeOf), BindingFlags.Static | BindingFlags.NonPublic)
+					.MakeGenericMethod(t);
+				size = (int)genericMethod.Invoke(null, new object[] { });
 				s_sizeOfCache.Add(t, size);
 			}
 
