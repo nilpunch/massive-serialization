@@ -19,8 +19,8 @@ namespace Massive.Serialization
 			SerializationUtils.WriteEntities(world.Entities, stream);
 
 			// Sets
-			SerializationUtils.WriteInt(world.SetRegistry.All.Count, stream);
-			foreach (var sparseSet in world.SetRegistry.All)
+			SerializationUtils.WriteInt(world.SetRegistry.AllSets.Count, stream);
+			foreach (var sparseSet in world.SetRegistry.AllSets)
 			{
 				var setType = world.SetRegistry.TypeOf(sparseSet);
 				SerializationUtils.WriteType(setType, stream);
@@ -45,40 +45,6 @@ namespace Massive.Serialization
 				{
 					SerializationUtils.WriteManagedPagedArray(dataSet.Data, sparseSet.Count, stream);
 				}
-			}
-
-			// Groups
-			var syncedGroups = new List<Group>();
-			foreach (var group in world.GroupRegistry.All)
-			{
-				if (group.IsSynced)
-				{
-					syncedGroups.Add(group);
-				}
-			}
-			SerializationUtils.WriteInt(syncedGroups.Count, stream);
-			foreach (var group in syncedGroups)
-			{
-				var included = group.Included;
-				var excluded = group.Excluded;
-
-				// Included
-				SerializationUtils.WriteInt(included.Length, stream);
-				foreach (var set in included)
-				{
-					var setType = world.SetRegistry.TypeOf(set);
-					SerializationUtils.WriteType(setType, stream);
-				}
-
-				// Excluded
-				SerializationUtils.WriteInt(excluded.Length, stream);
-				foreach (var set in excluded)
-				{
-					var setType = world.SetRegistry.TypeOf(set);
-					SerializationUtils.WriteType(setType, stream);
-				}
-
-				SerializationUtils.WriteSparseSet(group.Set, stream);
 			}
 		}
 
@@ -120,44 +86,11 @@ namespace Massive.Serialization
 				}
 			}
 			// Clear all remaining sets
-			foreach (var sparseSet in world.SetRegistry.All)
+			foreach (var sparseSet in world.SetRegistry.AllSets)
 			{
 				if (!deserializedSets.Contains(sparseSet))
 				{
 					sparseSet.ClearWithoutNotify();
-				}
-			}
-
-			// Groups
-			var deserializedGroups = new HashSet<Group>();
-			var groupCount = SerializationUtils.ReadInt(stream);
-			for (var groupIndex = 0; groupIndex < groupCount; groupIndex++)
-			{
-				// Included
-				var included = new SparseSet[SerializationUtils.ReadInt(stream)];
-				for (var i = 0; i < included.Length; i++)
-				{
-					included[i] = world.SetRegistry.GetReflected(SerializationUtils.ReadType(stream));
-				}
-
-				// Excluded
-				var excluded = new SparseSet[SerializationUtils.ReadInt(stream)];
-				for (var i = 0; i < excluded.Length; i++)
-				{
-					excluded[i] = world.SetRegistry.GetReflected(SerializationUtils.ReadType(stream));
-				}
-
-				var group = world.Group(included, excluded);
-				deserializedGroups.Add(group);
-
-				SerializationUtils.ReadSparseSet(group.Set, stream);
-			}
-			// Desync all remaining groups
-			foreach (var group in world.GroupRegistry.All)
-			{
-				if (!deserializedGroups.Contains(group))
-				{
-					group.Desync();
 				}
 			}
 		}
