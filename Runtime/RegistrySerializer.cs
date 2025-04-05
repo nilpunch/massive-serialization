@@ -8,6 +8,8 @@ namespace Massive.Serialization
 	{
 		private readonly Dictionary<Type, IDataSerializer> _customSerializers = new Dictionary<Type, IDataSerializer>();
 
+		private readonly HashSet<SparseSet> _deserializedSetsBuffer = new HashSet<SparseSet>();
+
 		public void AddCustomSerializer(Type type, IDataSerializer dataSerializer)
 		{
 			_customSerializers[type] = dataSerializer;
@@ -15,10 +17,10 @@ namespace Massive.Serialization
 
 		public void Serialize(World world, Stream stream)
 		{
-			// Entities
+			// Entities.
 			SerializationUtils.WriteEntities(world.Entities, stream);
 
-			// Sets
+			// Sets.
 			SerializationUtils.WriteInt(world.SetRegistry.AllSets.Count, stream);
 			foreach (var sparseSet in world.SetRegistry.AllSets)
 			{
@@ -50,18 +52,18 @@ namespace Massive.Serialization
 
 		public void Deserialize(World world, Stream stream)
 		{
-			// Entities
+			// Entities.
 			SerializationUtils.ReadEntities(world.Entities, stream);
 
-			// Sets
-			var deserializedSets = new HashSet<SparseSet>();
+			// Sets.
+			_deserializedSetsBuffer.Clear();
 			var setCount = SerializationUtils.ReadInt(stream);
 			for (var i = 0; i < setCount; i++)
 			{
 				var setKey = SerializationUtils.ReadType(stream);
 
 				var sparseSet = world.SetRegistry.GetReflected(setKey);
-				deserializedSets.Add(sparseSet);
+				_deserializedSetsBuffer.Add(sparseSet);
 
 				SerializationUtils.ReadSparseSet(sparseSet, stream);
 
@@ -85,10 +87,10 @@ namespace Massive.Serialization
 					SerializationUtils.ReadManagedPagedArray(dataSet.Data, sparseSet.Count, stream);
 				}
 			}
-			// Clear all remaining sets
+			// Clear all remaining sets.
 			foreach (var sparseSet in world.SetRegistry.AllSets)
 			{
-				if (!deserializedSets.Contains(sparseSet))
+				if (!_deserializedSetsBuffer.Contains(sparseSet))
 				{
 					sparseSet.ClearWithoutNotify();
 				}
