@@ -1,12 +1,12 @@
 {
   "name": "massive-serialization",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "Massive ECS Serialization",
   "unity": "2021.2",
   "description": "Serialization tools for Massive ECS.",
   "dependencies":
   {
-    "massive-ecs": "https://github.com/nilpunch/massive-ecs#v18.0.0-alpha"
+    "massive-ecs": "https://github.com/nilpunch/massive-ecs#v19.0.2"
   },
   "author": "nilpunch"
 }
