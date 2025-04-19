@@ -15,13 +15,13 @@ namespace Massive.Serialization
 		{
 			var state = entities.CurrentState;
 			WriteInt(state.Count, stream);
-			WriteInt(state.MaxId, stream);
+			WriteInt(state.UsedIds, stream);
 			WriteInt(state.NextHoleId, stream);
 			WriteByte((byte)state.Packing, stream);
 
-			stream.Write(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, entities.MaxId)));
-			stream.Write(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, entities.MaxId)));
-			stream.Write(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, entities.MaxId)));
+			stream.Write(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, entities.UsedIds)));
+			stream.Write(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, entities.UsedIds)));
+			stream.Write(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, entities.UsedIds)));
 		}
 
 		public static void ReadEntities(Entities entities, Stream stream)
@@ -32,11 +32,11 @@ namespace Massive.Serialization
 				ReadInt(stream),
 				(Packing)ReadByte(stream));
 
-			entities.EnsureCapacityAt(entities.MaxId);
+			entities.EnsureCapacityAt(entities.UsedIds);
 
-			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, entities.MaxId)));
-			stream.Read(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, entities.MaxId)));
-			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, entities.MaxId)));
+			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, entities.UsedIds)));
+			stream.Read(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, entities.UsedIds)));
+			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, entities.UsedIds)));
 		}
 
 		public static void WriteSparseSet(SparseSet set, Stream stream)
@@ -47,128 +47,30 @@ namespace Massive.Serialization
 			WriteInt(state.NextHole, stream);
 			WriteByte((byte)state.Packing, stream);
 
-			WriteInt(set.SparseCapacity, stream);
-
 			stream.Write(MemoryMarshal.Cast<int, byte>(set.Packed.AsSpan(0, set.Count)));
-			stream.Write(MemoryMarshal.Cast<int, byte>(set.Sparse.AsSpan(0, set.SparseCapacity)));
+			stream.Write(MemoryMarshal.Cast<int, byte>(set.Sparse.AsSpan(0, set.UsedIds)));
 		}
 
 		public static void ReadSparseSet(SparseSet set, Stream stream)
 		{
-			set.CurrentState = new SparseSet.State(
+			var state = new SparseSet.State(
 				ReadInt(stream),
 				ReadInt(stream),
 				ReadInt(stream),
 				(Packing)ReadByte(stream));
 
-			var sparseCapacity = ReadInt(stream);
+			set.EnsurePackedAt(state.Count - 1);
+			set.EnsureSparseAt(state.UsedIds - 1);
 
-			set.EnsurePackedAt(set.Count - 1);
-			set.EnsureSparseAt(sparseCapacity - 1);
+			stream.Read(MemoryMarshal.Cast<int, byte>(set.Packed.AsSpan(0, state.Count)));
+			stream.Read(MemoryMarshal.Cast<int, byte>(set.Sparse.AsSpan(0, state.UsedIds)));
 
-			stream.Read(MemoryMarshal.Cast<int, byte>(set.Packed.AsSpan(0, set.Count)));
-			stream.Read(MemoryMarshal.Cast<int, byte>(set.Sparse.AsSpan(0, sparseCapacity)));
-			if (sparseCapacity < set.SparseCapacity)
+			if (state.UsedIds < set.UsedIds)
 			{
-				Array.Fill(set.Sparse, Constants.InvalidId, sparseCapacity, set.SparseCapacity - sparseCapacity);
-			}
-		}
-
-		public static unsafe void WriteUnmanagedPagedArray(IPagedArray pagedArray, int count, Stream stream)
-		{
-			var underlyingType = pagedArray.ElementType.IsEnum ? Enum.GetUnderlyingType(pagedArray.ElementType) : pagedArray.ElementType;
-			var sizeOfItem = SizeOfUnmanaged(underlyingType);
-
-			foreach (var page in new PageSequence(pagedArray.PageSize, count))
-			{
-				var handle = GCHandle.Alloc(pagedArray.GetPage(page.Index), GCHandleType.Pinned);
-				var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), page.Length * sizeOfItem);
-				stream.Write(pageAsSpan);
-				handle.Free();
-			}
-		}
-
-		public static unsafe void ReadUnmanagedPagedArray(IPagedArray pagedArray, int count, Stream stream)
-		{
-			var underlyingType = pagedArray.ElementType.IsEnum ? Enum.GetUnderlyingType(pagedArray.ElementType) : pagedArray.ElementType;
-			var sizeOfItem = SizeOfUnmanaged(underlyingType);
-
-			foreach (var page in new PageSequence(pagedArray.PageSize, count))
-			{
-				pagedArray.EnsurePage(page.Index);
-
-				var handle = GCHandle.Alloc(pagedArray.GetPage(page.Index), GCHandleType.Pinned);
-				var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), page.Length * sizeOfItem);
-				stream.Read(pageAsSpan);
-				handle.Free();
-			}
-		}
-
-		public static unsafe void WriteUnmanagedArray(Array array, int count, Stream stream)
-		{
-			var elementType = array.GetType().GetElementType()!;
-			var underlyingType = elementType.IsEnum ? Enum.GetUnderlyingType(elementType) : elementType;
-			var sizeOfItem = SizeOfUnmanaged(underlyingType);
-
-			var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
-			var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), count * sizeOfItem);
-			stream.Write(pageAsSpan);
-			handle.Free();
-		}
-
-		public static unsafe void ReadUnmanagedArray(Array array, int count, Stream stream)
-		{
-			var elementType = array.GetType().GetElementType()!;
-			var underlyingType = elementType.IsEnum ? Enum.GetUnderlyingType(elementType) : elementType;
-			var sizeOfItem = SizeOfUnmanaged(underlyingType);
-
-			var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
-			var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), count * sizeOfItem);
-			stream.Read(pageAsSpan);
-			handle.Free();
-		}
-
-		public static void WriteManagedPagedArray(IPagedArray pagedArray, int count, Stream stream)
-		{
-			var binaryFormatter = new BinaryFormatter();
-			var buffer = Array.CreateInstance(pagedArray.ElementType, count);
-
-			foreach (var page in new PageSequence(pagedArray.PageSize, count))
-			{
-				Array.Copy(pagedArray.GetPage(page.Index), 0, buffer, page.Offset, page.Length);
+				Array.Fill(set.Sparse, Constants.InvalidId, state.UsedIds, set.UsedIds - state.UsedIds);
 			}
 
-			binaryFormatter.Serialize(stream, buffer);
-		}
-
-		public static void ReadManagedPagedArray(IPagedArray pagedArray, int count, Stream stream)
-		{
-			var binaryFormatter = new BinaryFormatter();
-			var buffer = (Array)binaryFormatter.Deserialize(stream);
-
-			foreach (var page in new PageSequence(pagedArray.PageSize, count))
-			{
-				pagedArray.EnsurePage(page.Index);
-				Array.Copy(buffer, page.Offset, pagedArray.GetPage(page.Index), 0, page.Length);
-			}
-		}
-
-		public static void WriteManagedArray(Array array, int count, Stream stream)
-		{
-			var binaryFormatter = new BinaryFormatter();
-			var buffer = Array.CreateInstance(array.GetType().GetElementType()!, count);
-
-			Array.Copy(array, buffer, count);
-
-			binaryFormatter.Serialize(stream, buffer);
-		}
-
-		public static void ReadManagedArray(Array array, int count, Stream stream)
-		{
-			var binaryFormatter = new BinaryFormatter();
-			var buffer = (Array)binaryFormatter.Deserialize(stream);
-
-			Array.Copy(buffer, array, count);
+			set.CurrentState = state;
 		}
 
 		public static void WriteInt(int value, Stream stream)
@@ -235,7 +137,7 @@ namespace Massive.Serialization
 
 		private static readonly Dictionary<Type, int> s_sizeOfCache = new Dictionary<Type, int>();
 
-		private unsafe static int SizeOf<T>() where T : unmanaged => sizeof(T);
+		private static unsafe int SizeOf<T>() where T : unmanaged => sizeof(T);
 
 		public static int SizeOfUnmanaged(Type t)
 		{

@@ -7,10 +7,15 @@ namespace Massive.Serialization
 	public class RegistrySerializer : IRegistrySerializer
 	{
 		private readonly Dictionary<Type, IDataSerializer> _customSerializers = new Dictionary<Type, IDataSerializer>();
+		private readonly HashSet<SparseSet> _setsBuffer = new HashSet<SparseSet>();
 
-		private readonly HashSet<SparseSet> _deserializedSetsBuffer = new HashSet<SparseSet>();
+		public SerializeMode SerializeMode { get; set; } = SerializeMode.AllExceptMarked;
 
-		public void AddCustomSerializer(Type type, IDataSerializer dataSerializer)
+		public IDataSerializer DefaultUnmanagedSerializer { get; set; } = UnmanagedBinaryDataSerializer.Instance;
+
+		public IDataSerializer DefaultManagedSerializer { get; set; } = BinaryFormatterDataSerializer.Instance;
+
+		public void SetCustomSerializer(Type type, IDataSerializer dataSerializer)
 		{
 			_customSerializers[type] = dataSerializer;
 		}
@@ -21,8 +26,35 @@ namespace Massive.Serialization
 			SerializationUtils.WriteEntities(world.Entities, stream);
 
 			// Sets.
-			SerializationUtils.WriteInt(world.SetRegistry.AllSets.Count, stream);
+			_setsBuffer.Clear();
+			var setsToSerialize = _setsBuffer;
 			foreach (var sparseSet in world.SetRegistry.AllSets)
+			{
+				var setType = world.SetRegistry.TypeOf(sparseSet);
+				if (setType == null)
+				{
+					// TODO: Serialization for custom untyped sets.
+					continue;
+				}
+
+				var needToSerialize = setType.IsDefined(typeof(NeedToSerialize), false);
+				var doNotSerialize = setType.IsDefined(typeof(DoNotSerialize), false);
+				if (needToSerialize && doNotSerialize)
+				{
+					throw new Exception($"[MASSIVE] Type:{setType.GetFullGenericName()} has conflictining serialization attributes.");
+				}
+
+				if (SerializeMode == SerializeMode.AllExceptMarked && !doNotSerialize
+					|| SerializeMode == SerializeMode.OnlyMarked && needToSerialize)
+				{
+					setsToSerialize.Add(sparseSet);
+				}
+			}
+
+			SerializationUtils.WriteInt(setsToSerialize.Count, stream);
+
+			// No need to maintain order — SetRegistry takes care of sorting.
+			foreach (var sparseSet in setsToSerialize)
 			{
 				var setType = world.SetRegistry.TypeOf(sparseSet);
 				SerializationUtils.WriteType(setType, stream);
@@ -41,11 +73,11 @@ namespace Massive.Serialization
 
 				if (dataSet.Data.ElementType.IsUnmanaged())
 				{
-					SerializationUtils.WriteUnmanagedPagedArray(dataSet.Data, sparseSet.Count, stream);
+					DefaultUnmanagedSerializer.Write(dataSet.Data, sparseSet.Count, stream);
 				}
 				else
 				{
-					SerializationUtils.WriteManagedPagedArray(dataSet.Data, sparseSet.Count, stream);
+					DefaultManagedSerializer.Write(dataSet.Data, sparseSet.Count, stream);
 				}
 			}
 		}
@@ -56,14 +88,15 @@ namespace Massive.Serialization
 			SerializationUtils.ReadEntities(world.Entities, stream);
 
 			// Sets.
-			_deserializedSetsBuffer.Clear();
+			_setsBuffer.Clear();
+			var deserializedSets = _setsBuffer;
 			var setCount = SerializationUtils.ReadInt(stream);
 			for (var i = 0; i < setCount; i++)
 			{
-				var setKey = SerializationUtils.ReadType(stream);
+				var setType = SerializationUtils.ReadType(stream);
 
-				var sparseSet = world.SetRegistry.GetReflected(setKey);
-				_deserializedSetsBuffer.Add(sparseSet);
+				var sparseSet = world.SetRegistry.GetReflected(setType);
+				deserializedSets.Add(sparseSet);
 
 				SerializationUtils.ReadSparseSet(sparseSet, stream);
 
@@ -72,7 +105,7 @@ namespace Massive.Serialization
 					continue;
 				}
 
-				if (_customSerializers.TryGetValue(setKey, out var customSerializer))
+				if (_customSerializers.TryGetValue(setType, out var customSerializer))
 				{
 					customSerializer.Read(dataSet.Data, sparseSet.Count, stream);
 					continue;
@@ -80,17 +113,17 @@ namespace Massive.Serialization
 
 				if (dataSet.Data.ElementType.IsUnmanaged())
 				{
-					SerializationUtils.ReadUnmanagedPagedArray(dataSet.Data, sparseSet.Count, stream);
+					DefaultUnmanagedSerializer.Read(dataSet.Data, sparseSet.Count, stream);
 				}
 				else
 				{
-					SerializationUtils.ReadManagedPagedArray(dataSet.Data, sparseSet.Count, stream);
+					DefaultManagedSerializer.Read(dataSet.Data, sparseSet.Count, stream);
 				}
 			}
 			// Clear all remaining sets.
 			foreach (var sparseSet in world.SetRegistry.AllSets)
 			{
-				if (!_deserializedSetsBuffer.Contains(sparseSet))
+				if (!deserializedSets.Contains(sparseSet))
 				{
 					sparseSet.ClearWithoutNotify();
 				}
