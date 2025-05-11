@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 
 // ReSharper disable MustUseReturnValue
@@ -26,17 +25,24 @@ namespace Massive.Serialization
 
 		public static void ReadEntities(Entities entities, Stream stream)
 		{
-			entities.CurrentState = new Entities.State(
+			var state = new Entities.State(
 				ReadInt(stream),
 				ReadInt(stream),
 				ReadInt(stream),
 				(Packing)ReadByte(stream));
 
-			entities.EnsureCapacityAt(entities.UsedIds);
+			entities.EnsureCapacityAt(state.UsedIds);
 
-			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, entities.UsedIds)));
-			stream.Read(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, entities.UsedIds)));
-			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, entities.UsedIds)));
+			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, state.UsedIds)));
+			stream.Read(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, state.UsedIds)));
+			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, state.UsedIds)));
+
+			if (state.UsedIds < entities.UsedIds)
+			{
+				Array.Fill(entities.Versions, 1U, state.UsedIds, entities.UsedIds - state.UsedIds);
+			}
+
+			entities.CurrentState = state;
 		}
 
 		public static void WriteSparseSet(SparseSet set, Stream stream)
@@ -71,6 +77,48 @@ namespace Massive.Serialization
 			}
 
 			set.CurrentState = state;
+		}
+
+		public static unsafe void WriteAllocator(Allocator allocator, Stream stream)
+		{
+			WriteInt(allocator.ChunkCount, stream);
+			WriteInt(allocator.UsedSpace, stream);
+
+			stream.Write(MemoryMarshal.Cast<Chunk, byte>(allocator.Chunks.AsSpan(0, allocator.ChunkCount)));
+			stream.Write(MemoryMarshal.Cast<int, byte>(allocator.ChunkFreeLists.AsSpan()));
+
+			var underlyingType = allocator.ElementType.IsEnum ? Enum.GetUnderlyingType(allocator.ElementType) : allocator.ElementType;
+			var sizeOfItem = SizeOfUnmanaged(underlyingType);
+			var handle = GCHandle.Alloc(allocator.RawData, GCHandleType.Pinned);
+			var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), allocator.UsedSpace * sizeOfItem);
+			stream.Write(pageAsSpan);
+			handle.Free();
+		}
+
+		public static unsafe void ReadAllocator(Allocator allocator, Stream stream)
+		{
+			var chunkCount = ReadInt(stream);
+			var usedSpace = ReadInt(stream);
+
+			allocator.EnsureChunkAt(chunkCount - 1);
+			allocator.EnsureDataCapacity(usedSpace);
+
+			stream.Read(MemoryMarshal.Cast<Chunk, byte>(allocator.Chunks.AsSpan(0, allocator.ChunkCount)));
+			stream.Read(MemoryMarshal.Cast<int, byte>(allocator.ChunkFreeLists.AsSpan()));
+
+			if (chunkCount < allocator.ChunkCount)
+			{
+				Array.Fill(allocator.Chunks, Chunk.DefaultValid, chunkCount, allocator.ChunkCount - chunkCount);
+			}
+
+			var underlyingType = allocator.ElementType.IsEnum ? Enum.GetUnderlyingType(allocator.ElementType) : allocator.ElementType;
+			var sizeOfItem = SizeOfUnmanaged(underlyingType);
+			var handle = GCHandle.Alloc(allocator.RawData, GCHandleType.Pinned);
+			var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), usedSpace * sizeOfItem);
+			stream.Read(pageAsSpan);
+			handle.Free();
+
+			allocator.SetState(chunkCount, usedSpace);
 		}
 
 		public static void WriteInt(int value, Stream stream)

@@ -8,6 +8,7 @@ namespace Massive.Serialization
 	{
 		private readonly Dictionary<Type, IDataSerializer> _customSerializers = new Dictionary<Type, IDataSerializer>();
 		private readonly HashSet<SparseSet> _setsBuffer = new HashSet<SparseSet>();
+		private readonly HashSet<Allocator> _allocatorsBuffer = new HashSet<Allocator>();
 
 		public SerializeMode SerializeMode { get; set; } = SerializeMode.AllExceptMarked;
 
@@ -80,6 +81,15 @@ namespace Massive.Serialization
 					DefaultManagedSerializer.Write(dataSet.Data, sparseSet.Count, stream);
 				}
 			}
+
+			// Allocators.
+			SerializationUtils.WriteInt(world.AllocatorRegistry.AllAllocators.Count, stream);
+			foreach (var allocator in world.AllocatorRegistry.AllAllocators)
+			{
+				var allocatorType = world.AllocatorRegistry.TypeOf(allocator);
+				SerializationUtils.WriteType(allocatorType, stream);
+				SerializationUtils.WriteAllocator(allocator, stream);
+			}
 		}
 
 		public void Deserialize(World world, Stream stream)
@@ -126,6 +136,28 @@ namespace Massive.Serialization
 				if (!deserializedSets.Contains(sparseSet))
 				{
 					sparseSet.ClearWithoutNotify();
+				}
+			}
+
+			// Allocators.
+			_allocatorsBuffer.Clear();
+			var deserializedAllocators = _allocatorsBuffer;
+			var allocatorCount = SerializationUtils.ReadInt(stream);
+			for (var i = 0; i < allocatorCount; i++)
+			{
+				var allocatorType = SerializationUtils.ReadType(stream);
+
+				var allocator = world.AllocatorRegistry.GetReflected(allocatorType);
+				deserializedAllocators.Add(allocator);
+
+				SerializationUtils.ReadAllocator(allocator, stream);
+			}
+			// Reset all remaining allocators.
+			foreach (var allocator in world.AllocatorRegistry.AllAllocators)
+			{
+				if (!deserializedAllocators.Contains(allocator))
+				{
+					allocator.Reset();
 				}
 			}
 		}
