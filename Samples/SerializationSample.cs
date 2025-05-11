@@ -12,31 +12,31 @@ namespace Massive.Samples.Serialization
 
 		static void Main()
 		{
-			var registry = new World();
+			var world = new World();
 
-			PopulateEntitiesAndComponents(registry);
+			PopulateEntitiesAndComponents(world);
 
-			var registrySerializer = new RegistrySerializer();
+			var worldSerializer = new WorldSerializer();
 
 			// By default, managed types are serialized using BinaryFormatter, which requires the [Serializable] attribute on the component.
 			// Custom serialization can be implemented like this:
-			registrySerializer.SetCustomSerializer(typeof(Inventory), new BinaryFormatterDataSerializer());
+			worldSerializer.SetCustomSerializer(typeof(Inventory), new BinaryFormatterDataSerializer());
 
-			// Save registry to the file
+			// Save world to the file.
 			using (FileStream stream = new FileStream(PathToSaveFile, FileMode.Create, FileAccess.Write))
 			{
-				registrySerializer.Serialize(registry, stream);
+				worldSerializer.Serialize(world, stream);
 			}
 
-			// Load registry from the file.
-			// It is important to use a serializer with the same configuration as for saving
+			// Load world from the file.
+			// It is important to use a serializer with the same configuration as for saving.
 			var savedRegistry = new World();
 			using (FileStream stream = new FileStream(PathToSaveFile, FileMode.Open, FileAccess.Read))
 			{
-				registrySerializer.Deserialize(savedRegistry, stream);
+				worldSerializer.Deserialize(savedRegistry, stream);
 			}
 
-			// Done, use your registry as you wish
+			// Done, use your world as you wish.
 		}
 
 		private static void PopulateEntitiesAndComponents(World world)

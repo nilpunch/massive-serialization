@@ -4,7 +4,7 @@ using System.IO;
 
 namespace Massive.Serialization
 {
-	public class RegistrySerializer : IRegistrySerializer
+	public class WorldSerializer : IWorldSerializer
 	{
 		private readonly Dictionary<Type, IDataSerializer> _customSerializers = new Dictionary<Type, IDataSerializer>();
 		private readonly HashSet<SparseSet> _setsBuffer = new HashSet<SparseSet>();
