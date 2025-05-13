@@ -90,8 +90,8 @@ namespace Massive.Serialization
 			var underlyingType = allocator.ElementType.IsEnum ? Enum.GetUnderlyingType(allocator.ElementType) : allocator.ElementType;
 			var sizeOfItem = SizeOfUnmanaged(underlyingType);
 			var handle = GCHandle.Alloc(allocator.RawData, GCHandleType.Pinned);
-			var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), allocator.UsedSpace * sizeOfItem);
-			stream.Write(pageAsSpan);
+			var span = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), allocator.UsedSpace * sizeOfItem);
+			stream.Write(span);
 			handle.Free();
 		}
 
@@ -103,7 +103,7 @@ namespace Massive.Serialization
 			allocator.EnsureChunkAt(chunkCount - 1);
 			allocator.EnsureDataCapacity(usedSpace);
 
-			stream.Read(MemoryMarshal.Cast<Chunk, byte>(allocator.Chunks.AsSpan(0, allocator.ChunkCount)));
+			stream.Read(MemoryMarshal.Cast<Chunk, byte>(allocator.Chunks.AsSpan(0, chunkCount)));
 			stream.Read(MemoryMarshal.Cast<int, byte>(allocator.ChunkFreeLists.AsSpan()));
 
 			if (chunkCount < allocator.ChunkCount)
@@ -114,11 +114,45 @@ namespace Massive.Serialization
 			var underlyingType = allocator.ElementType.IsEnum ? Enum.GetUnderlyingType(allocator.ElementType) : allocator.ElementType;
 			var sizeOfItem = SizeOfUnmanaged(underlyingType);
 			var handle = GCHandle.Alloc(allocator.RawData, GCHandleType.Pinned);
-			var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), usedSpace * sizeOfItem);
-			stream.Read(pageAsSpan);
+			var span = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), usedSpace * sizeOfItem);
+			stream.Read(span);
 			handle.Free();
 
 			allocator.SetState(chunkCount, usedSpace);
+		}
+
+		public static void WriteAllocationTracker(AllocatorRegistry allocatorRegistry, Stream stream)
+		{
+			WriteInt(allocatorRegistry.UsedAllocations, stream);
+			WriteInt(allocatorRegistry.NextFreeAllocation, stream);
+			WriteInt(allocatorRegistry.UsedHeads, stream);
+
+			stream.Write(MemoryMarshal.Cast<AllocatorRegistry.Allocation, byte>(
+				allocatorRegistry.Allocations.AsSpan(0, allocatorRegistry.UsedAllocations)));
+			stream.Write(MemoryMarshal.Cast<int, byte>(
+				allocatorRegistry.Heads.AsSpan(0, allocatorRegistry.UsedHeads)));
+		}
+
+		public static void ReadAllocationTracker(AllocatorRegistry allocatorRegistry, Stream stream)
+		{
+			var usedAllocations = ReadInt(stream);
+			var nextFreeAllocation = ReadInt(stream);
+			var usedHeads = ReadInt(stream);
+
+			allocatorRegistry.EnsureTrackerAllocationAt(usedAllocations - 1);
+			allocatorRegistry.EnsureTrackerHeadAt(usedHeads - 1);
+
+			stream.Read(MemoryMarshal.Cast<AllocatorRegistry.Allocation, byte>(
+				allocatorRegistry.Allocations.AsSpan(0, usedAllocations)));
+			stream.Read(MemoryMarshal.Cast<int, byte>(
+				allocatorRegistry.Heads.AsSpan(0, usedHeads)));
+
+			if (usedHeads < allocatorRegistry.UsedHeads)
+			{
+				Array.Fill(allocatorRegistry.Heads, Constants.InvalidId, usedHeads, allocatorRegistry.UsedHeads - usedHeads);
+			}
+
+			allocatorRegistry.SetTrackerState(usedAllocations, nextFreeAllocation, usedHeads);
 		}
 
 		public static void WriteInt(int value, Stream stream)

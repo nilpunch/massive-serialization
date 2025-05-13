@@ -90,6 +90,9 @@ namespace Massive.Serialization
 				SerializationUtils.WriteType(allocatorType, stream);
 				SerializationUtils.WriteAllocator(allocator, stream);
 			}
+
+			// Allocation tracker.
+			SerializationUtils.WriteAllocationTracker(world.AllocatorRegistry, stream);
 		}
 
 		public void Deserialize(World world, Stream stream)
@@ -160,6 +163,9 @@ namespace Massive.Serialization
 					allocator.Reset();
 				}
 			}
+
+			// Allocation tracker.
+			SerializationUtils.ReadAllocationTracker(world.AllocatorRegistry, stream);
 		}
 	}
 }
