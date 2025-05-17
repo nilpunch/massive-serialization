@@ -121,38 +121,38 @@ namespace Massive.Serialization
 			allocator.SetState(chunkCount, usedSpace);
 		}
 
-		public static void WriteAllocationTracker(AllocatorRegistry allocatorRegistry, Stream stream)
+		public static void WriteAllocationTracker(Allocators allocators, Stream stream)
 		{
-			WriteInt(allocatorRegistry.UsedAllocations, stream);
-			WriteInt(allocatorRegistry.NextFreeAllocation, stream);
-			WriteInt(allocatorRegistry.UsedHeads, stream);
+			WriteInt(allocators.UsedAllocations, stream);
+			WriteInt(allocators.NextFreeAllocation, stream);
+			WriteInt(allocators.UsedHeads, stream);
 
-			stream.Write(MemoryMarshal.Cast<AllocatorRegistry.Allocation, byte>(
-				allocatorRegistry.Allocations.AsSpan(0, allocatorRegistry.UsedAllocations)));
+			stream.Write(MemoryMarshal.Cast<Allocators.Allocation, byte>(
+				allocators.Allocations.AsSpan(0, allocators.UsedAllocations)));
 			stream.Write(MemoryMarshal.Cast<int, byte>(
-				allocatorRegistry.Heads.AsSpan(0, allocatorRegistry.UsedHeads)));
+				allocators.Heads.AsSpan(0, allocators.UsedHeads)));
 		}
 
-		public static void ReadAllocationTracker(AllocatorRegistry allocatorRegistry, Stream stream)
+		public static void ReadAllocationTracker(Allocators allocators, Stream stream)
 		{
 			var usedAllocations = ReadInt(stream);
 			var nextFreeAllocation = ReadInt(stream);
 			var usedHeads = ReadInt(stream);
 
-			allocatorRegistry.EnsureTrackerAllocationAt(usedAllocations - 1);
-			allocatorRegistry.EnsureTrackerHeadAt(usedHeads - 1);
+			allocators.EnsureTrackerAllocationAt(usedAllocations - 1);
+			allocators.EnsureTrackerHeadAt(usedHeads - 1);
 
-			stream.Read(MemoryMarshal.Cast<AllocatorRegistry.Allocation, byte>(
-				allocatorRegistry.Allocations.AsSpan(0, usedAllocations)));
+			stream.Read(MemoryMarshal.Cast<Allocators.Allocation, byte>(
+				allocators.Allocations.AsSpan(0, usedAllocations)));
 			stream.Read(MemoryMarshal.Cast<int, byte>(
-				allocatorRegistry.Heads.AsSpan(0, usedHeads)));
+				allocators.Heads.AsSpan(0, usedHeads)));
 
-			if (usedHeads < allocatorRegistry.UsedHeads)
+			if (usedHeads < allocators.UsedHeads)
 			{
-				Array.Fill(allocatorRegistry.Heads, Constants.InvalidId, usedHeads, allocatorRegistry.UsedHeads - usedHeads);
+				Array.Fill(allocators.Heads, Constants.InvalidId, usedHeads, allocators.UsedHeads - usedHeads);
 			}
 
-			allocatorRegistry.SetTrackerState(usedAllocations, nextFreeAllocation, usedHeads);
+			allocators.SetTrackerState(usedAllocations, nextFreeAllocation, usedHeads);
 		}
 
 		public static void WriteInt(int value, Stream stream)

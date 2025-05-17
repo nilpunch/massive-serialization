@@ -29,9 +29,9 @@ namespace Massive.Serialization
 			// Sets.
 			_setsBuffer.Clear();
 			var setsToSerialize = _setsBuffer;
-			foreach (var sparseSet in world.SetRegistry.AllSets)
+			foreach (var sparseSet in world.Sets.AllSets)
 			{
-				var setType = world.SetRegistry.TypeOf(sparseSet);
+				var setType = world.Sets.TypeOf(sparseSet);
 				if (setType == null)
 				{
 					// TODO: Serialization for custom untyped sets.
@@ -57,7 +57,7 @@ namespace Massive.Serialization
 			// No need to maintain order — SetRegistry takes care of sorting.
 			foreach (var sparseSet in setsToSerialize)
 			{
-				var setType = world.SetRegistry.TypeOf(sparseSet);
+				var setType = world.Sets.TypeOf(sparseSet);
 				SerializationUtils.WriteType(setType, stream);
 				SerializationUtils.WriteSparseSet(sparseSet, stream);
 
@@ -83,16 +83,16 @@ namespace Massive.Serialization
 			}
 
 			// Allocators.
-			SerializationUtils.WriteInt(world.AllocatorRegistry.AllAllocators.Count, stream);
-			foreach (var allocator in world.AllocatorRegistry.AllAllocators)
+			SerializationUtils.WriteInt(world.Allocators.AllAllocators.Count, stream);
+			foreach (var allocator in world.Allocators.AllAllocators)
 			{
-				var allocatorType = world.AllocatorRegistry.TypeOf(allocator);
+				var allocatorType = world.Allocators.TypeOf(allocator);
 				SerializationUtils.WriteType(allocatorType, stream);
 				SerializationUtils.WriteAllocator(allocator, stream);
 			}
 
 			// Allocation tracker.
-			SerializationUtils.WriteAllocationTracker(world.AllocatorRegistry, stream);
+			SerializationUtils.WriteAllocationTracker(world.Allocators, stream);
 		}
 
 		public void Deserialize(World world, Stream stream)
@@ -108,7 +108,7 @@ namespace Massive.Serialization
 			{
 				var setType = SerializationUtils.ReadType(stream);
 
-				var sparseSet = world.SetRegistry.GetReflected(setType);
+				var sparseSet = world.Sets.GetReflected(setType);
 				deserializedSets.Add(sparseSet);
 
 				SerializationUtils.ReadSparseSet(sparseSet, stream);
@@ -134,7 +134,7 @@ namespace Massive.Serialization
 				}
 			}
 			// Clear all remaining sets.
-			foreach (var sparseSet in world.SetRegistry.AllSets)
+			foreach (var sparseSet in world.Sets.AllSets)
 			{
 				if (!deserializedSets.Contains(sparseSet))
 				{
@@ -150,13 +150,13 @@ namespace Massive.Serialization
 			{
 				var allocatorType = SerializationUtils.ReadType(stream);
 
-				var allocator = world.AllocatorRegistry.GetReflected(allocatorType);
+				var allocator = world.Allocators.GetReflected(allocatorType);
 				deserializedAllocators.Add(allocator);
 
 				SerializationUtils.ReadAllocator(allocator, stream);
 			}
 			// Reset all remaining allocators.
-			foreach (var allocator in world.AllocatorRegistry.AllAllocators)
+			foreach (var allocator in world.Allocators.AllAllocators)
 			{
 				if (!deserializedAllocators.Contains(allocator))
 				{
@@ -165,7 +165,7 @@ namespace Massive.Serialization
 			}
 
 			// Allocation tracker.
-			SerializationUtils.ReadAllocationTracker(world.AllocatorRegistry, stream);
+			SerializationUtils.ReadAllocationTracker(world.Allocators, stream);
 		}
 	}
 }
