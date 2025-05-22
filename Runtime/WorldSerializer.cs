@@ -9,6 +9,7 @@ namespace Massive.Serialization
 		private readonly Dictionary<Type, IDataSerializer> _customSerializers = new Dictionary<Type, IDataSerializer>();
 		private readonly HashSet<SparseSet> _setsBuffer = new HashSet<SparseSet>();
 		private readonly HashSet<Allocator> _allocatorsBuffer = new HashSet<Allocator>();
+		private int[] _remap = Array.Empty<int>();
 
 		public SerializeMode SerializeMode { get; set; } = SerializeMode.AllExceptMarked;
 
@@ -34,10 +35,11 @@ namespace Massive.Serialization
 				var setType = world.Sets.TypeOf(sparseSet);
 				if (setType == null)
 				{
-					// TODO: Serialization for custom untyped sets.
+					// Skip custom untyped sets (not supported yet).
 					continue;
 				}
 
+				// Check serialization attributes.
 				var needToSerialize = setType.IsDefined(typeof(NeedToSerialize), false);
 				var doNotSerialize = setType.IsDefined(typeof(DoNotSerialize), false);
 				if (needToSerialize && doNotSerialize)
@@ -45,6 +47,7 @@ namespace Massive.Serialization
 					throw new Exception($"[MASSIVE] Type:{setType.GetFullGenericName()} has conflictining serialization attributes.");
 				}
 
+				// Decide whether to serialize this set based on mode and attributes.
 				if (SerializeMode == SerializeMode.AllExceptMarked && !doNotSerialize
 					|| SerializeMode == SerializeMode.OnlyMarked && needToSerialize)
 				{
@@ -52,26 +55,30 @@ namespace Massive.Serialization
 				}
 			}
 
+			// Write set count.
 			SerializationUtils.WriteInt(setsToSerialize.Count, stream);
 
-			// No need to maintain order — SetRegistry takes care of sorting.
+			// Serialize each set. Order doesn't matter.
 			foreach (var sparseSet in setsToSerialize)
 			{
 				var setType = world.Sets.TypeOf(sparseSet);
 				SerializationUtils.WriteType(setType, stream);
 				SerializationUtils.WriteSparseSet(sparseSet, stream);
 
+				// Only IDataSet has serializable data.
 				if (sparseSet is not IDataSet dataSet)
 				{
 					continue;
 				}
 
+				// Use custom serializer if registered.
 				if (_customSerializers.TryGetValue(setType, out var customSerializer))
 				{
 					customSerializer.Write(dataSet.Data, sparseSet.Count, stream);
 					continue;
 				}
 
+				// Fallback to default serializers for managed/unmanaged types.
 				if (dataSet.Data.ElementType.IsUnmanaged())
 				{
 					DefaultUnmanagedSerializer.Write(dataSet.Data, sparseSet.Count, stream);
@@ -88,6 +95,7 @@ namespace Massive.Serialization
 			{
 				var allocatorType = world.Allocators.TypeOf(allocator);
 				SerializationUtils.WriteType(allocatorType, stream);
+				SerializationUtils.WriteInt(allocator.AllocatorId, stream); // Store non-deterministic ID for remapping.
 				SerializationUtils.WriteAllocator(allocator, stream);
 			}
 
@@ -107,23 +115,25 @@ namespace Massive.Serialization
 			for (var i = 0; i < setCount; i++)
 			{
 				var setType = SerializationUtils.ReadType(stream);
-
 				var sparseSet = world.Sets.GetReflected(setType);
 				deserializedSets.Add(sparseSet);
 
 				SerializationUtils.ReadSparseSet(sparseSet, stream);
 
+				// Only IDataSet has serializable data.
 				if (sparseSet is not IDataSet dataSet)
 				{
 					continue;
 				}
 
+				// Use custom deserializer if registered.
 				if (_customSerializers.TryGetValue(setType, out var customSerializer))
 				{
 					customSerializer.Read(dataSet.Data, sparseSet.Count, stream);
 					continue;
 				}
 
+				// Fallback to default deserializers for managed/unmanaged types.
 				if (dataSet.Data.ElementType.IsUnmanaged())
 				{
 					DefaultUnmanagedSerializer.Read(dataSet.Data, sparseSet.Count, stream);
@@ -133,7 +143,7 @@ namespace Massive.Serialization
 					DefaultManagedSerializer.Read(dataSet.Data, sparseSet.Count, stream);
 				}
 			}
-			// Clear all remaining sets.
+			// Clear all sets that weren't deserialized.
 			foreach (var sparseSet in world.Sets.AllSets)
 			{
 				if (!deserializedSets.Contains(sparseSet))
@@ -149,13 +159,21 @@ namespace Massive.Serialization
 			for (var i = 0; i < allocatorCount; i++)
 			{
 				var allocatorType = SerializationUtils.ReadType(stream);
+				var sourceAllocatorId = SerializationUtils.ReadInt(stream);
 
 				var allocator = world.Allocators.GetReflected(allocatorType);
 				deserializedAllocators.Add(allocator);
 
+				// Grow remap buffer if needed.
+				if (sourceAllocatorId >= _remap.Length)
+				{
+					_remap = _remap.Resize(MathUtils.NextPowerOf2(sourceAllocatorId + 1));
+				}
+				_remap[sourceAllocatorId] = allocator.AllocatorId;
+
 				SerializationUtils.ReadAllocator(allocator, stream);
 			}
-			// Reset all remaining allocators.
+			// Reset all allocators that weren't deserialized.
 			foreach (var allocator in world.Allocators.AllAllocators)
 			{
 				if (!deserializedAllocators.Contains(allocator))
@@ -166,6 +184,13 @@ namespace Massive.Serialization
 
 			// Allocation tracker.
 			SerializationUtils.ReadAllocationTracker(world.Allocators, stream);
+
+			// Remap all tracked allocations to local IDs for compatibility.
+			for (var i = 0; i < world.Allocators.UsedAllocations; i++)
+			{
+				ref var allocation = ref world.Allocators.Allocations[i];
+				allocation.AllocatorId = _remap[allocation.AllocatorId];
+			}
 		}
 	}
 }
