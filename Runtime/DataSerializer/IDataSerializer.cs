@@ -4,7 +4,7 @@ namespace Massive.Serialization
 {
 	public interface IDataSerializer
 	{
-		void Write(IPagedArray pagedArray, int count, Stream stream);
-		void Read(IPagedArray pagedArray, int count, Stream stream);
+		void Write(IDataSet dataSet, BitSet bitSet, Stream stream);
+		void Read(IDataSet dataSet, BitSet bitSet, Stream stream);
 	}
 }

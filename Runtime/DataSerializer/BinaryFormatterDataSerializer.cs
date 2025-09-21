@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 
@@ -8,28 +9,69 @@ namespace Massive.Serialization
 	{
 		public static BinaryFormatterDataSerializer Instance { get; } = new BinaryFormatterDataSerializer();
 
-		public void Write(IPagedArray pagedArray, int count, Stream stream)
+		public void Write(IDataSet dataSet, BitSet bitSet, Stream stream)
 		{
 			var binaryFormatter = new BinaryFormatter();
-			var buffer = Array.CreateInstance(pagedArray.ElementType, count);
+			var buffer = Array.CreateInstance(dataSet.ElementType, 16);
+			var count = 0;
 
-			foreach (var page in new PageSequence(pagedArray.PageSize, count))
+			var blocksLength = bitSet.NonEmptyBlocks.Length;
+
+			var pageMasks = Constants.PageMasks;
+			var deBruijn = MathUtils.DeBruijn;
+			for (var blockIndex = 0; blockIndex < blocksLength; blockIndex++)
 			{
-				Array.Copy(pagedArray.GetPage(page.Index), 0, buffer, page.Offset, page.Length);
+				var block = bitSet.NonEmptyBlocks[blockIndex];
+				var pageOffset = blockIndex << Constants.PagesInBlockPower;
+				while (block != 0UL)
+				{
+					var blockBit = (int)deBruijn[(int)(((block & (ulong)-(long)block) * 0x37E84A99DAE458FUL) >> 58)];
+					var pageIndexMod = blockBit >> Constants.PageMaskShift;
+
+					var pageIndex = pageOffset + pageIndexMod;
+
+					if (count >= buffer.Length)
+					{
+						var growBuffer = Array.CreateInstance(dataSet.ElementType, buffer.Length << 1);
+						buffer.CopyTo(growBuffer, 0);
+						buffer = growBuffer;
+					}
+
+					Array.Copy(dataSet.GetPage(pageIndex), 0, buffer, Constants.PageSize * count++, Constants.PageSize);
+
+					block &= ~pageMasks[pageIndexMod];
+				}
 			}
 
 			binaryFormatter.Serialize(stream, buffer);
 		}
 
-		public void Read(IPagedArray pagedArray, int count, Stream stream)
+		public void Read(IDataSet dataSet, BitSet bitSet, Stream stream)
 		{
 			var binaryFormatter = new BinaryFormatter();
 			var buffer = (Array)binaryFormatter.Deserialize(stream);
+			var count = 0;
 
-			foreach (var page in new PageSequence(pagedArray.PageSize, count))
+			var blocksLength = bitSet.NonEmptyBlocks.Length;
+
+			var pageMasks = Constants.PageMasks;
+			var deBruijn = MathUtils.DeBruijn;
+			for (var blockIndex = 0; blockIndex < blocksLength; blockIndex++)
 			{
-				pagedArray.EnsurePage(page.Index);
-				Array.Copy(buffer, page.Offset, pagedArray.GetPage(page.Index), 0, page.Length);
+				var block = bitSet.NonEmptyBlocks[blockIndex];
+				var pageOffset = blockIndex << Constants.PagesInBlockPower;
+				while (block != 0UL)
+				{
+					var blockBit = (int)deBruijn[(int)(((block & (ulong)-(long)block) * 0x37E84A99DAE458FUL) >> 58)];
+					var pageIndexMod = blockBit >> Constants.PageMaskShift;
+
+					var pageIndex = pageOffset + pageIndexMod;
+					dataSet.EnsurePage(pageIndex);
+
+					Array.Copy(buffer, Constants.PageSize * count++, dataSet.GetPage(pageIndex), 0, Constants.PageSize);
+
+					block &= ~pageMasks[pageIndexMod];
+				}
 			}
 		}
 	}

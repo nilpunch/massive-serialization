@@ -8,33 +8,65 @@ namespace Massive.Serialization
 	{
 		public static UnmanagedBinaryDataSerializer Instance { get; } = new UnmanagedBinaryDataSerializer();
 
-		public unsafe void Write(IPagedArray pagedArray, int count, Stream stream)
+		public unsafe void Write(IDataSet dataSet, BitSet bitSet, Stream stream)
 		{
-			var underlyingType = pagedArray.ElementType.IsEnum ? Enum.GetUnderlyingType(pagedArray.ElementType) : pagedArray.ElementType;
+			var underlyingType = dataSet.ElementType.IsEnum ? Enum.GetUnderlyingType(dataSet.ElementType) : dataSet.ElementType;
 			var sizeOfItem = SerializationUtils.SizeOfUnmanaged(underlyingType);
 
-			foreach (var page in new PageSequence(pagedArray.PageSize, count))
+			var blocksLength = bitSet.NonEmptyBlocks.Length;
+
+			var pageMasks = Constants.PageMasks;
+			var deBruijn = MathUtils.DeBruijn;
+			for (var blockIndex = 0; blockIndex < blocksLength; blockIndex++)
 			{
-				var handle = GCHandle.Alloc(pagedArray.GetPage(page.Index), GCHandleType.Pinned);
-				var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), page.Length * sizeOfItem);
-				stream.Write(pageAsSpan);
-				handle.Free();
+				var block = bitSet.NonEmptyBlocks[blockIndex];
+				var pageOffset = blockIndex << Constants.PagesInBlockPower;
+				while (block != 0UL)
+				{
+					var blockBit = (int)deBruijn[(int)(((block & (ulong)-(long)block) * 0x37E84A99DAE458FUL) >> 58)];
+					var pageIndexMod = blockBit >> Constants.PageMaskShift;
+
+					var pageIndex = pageOffset + pageIndexMod;
+
+					var handle = GCHandle.Alloc(dataSet.GetPage(pageIndex), GCHandleType.Pinned);
+					var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), Constants.PageSize * sizeOfItem);
+					stream.Write(pageAsSpan);
+					handle.Free();
+
+					block &= ~pageMasks[pageIndexMod];
+				}
 			}
 		}
 
-		public unsafe void Read(IPagedArray pagedArray, int count, Stream stream)
+		public unsafe void Read(IDataSet dataSet, BitSet bitSet, Stream stream)
 		{
-			var underlyingType = pagedArray.ElementType.IsEnum ? Enum.GetUnderlyingType(pagedArray.ElementType) : pagedArray.ElementType;
+			var underlyingType = dataSet.ElementType.IsEnum ? Enum.GetUnderlyingType(dataSet.ElementType) : dataSet.ElementType;
 			var sizeOfItem = SerializationUtils.SizeOfUnmanaged(underlyingType);
 
-			foreach (var page in new PageSequence(pagedArray.PageSize, count))
-			{
-				pagedArray.EnsurePage(page.Index);
+			var blocksLength = bitSet.NonEmptyBlocks.Length;
 
-				var handle = GCHandle.Alloc(pagedArray.GetPage(page.Index), GCHandleType.Pinned);
-				var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), page.Length * sizeOfItem);
-				stream.Read(pageAsSpan);
-				handle.Free();
+			var pageMasks = Constants.PageMasks;
+			var deBruijn = MathUtils.DeBruijn;
+			for (var blockIndex = 0; blockIndex < blocksLength; blockIndex++)
+			{
+				var block = bitSet.NonEmptyBlocks[blockIndex];
+				var pageOffset = blockIndex << Constants.PagesInBlockPower;
+				while (block != 0UL)
+				{
+					var blockBit = (int)deBruijn[(int)(((block & (ulong)-(long)block) * 0x37E84A99DAE458FUL) >> 58)];
+					var pageIndexMod = blockBit >> Constants.PageMaskShift;
+
+					var pageIndex = pageOffset + pageIndexMod;
+
+					dataSet.EnsurePage(pageIndex);
+
+					var handle = GCHandle.Alloc(dataSet.GetPage(pageIndex), GCHandleType.Pinned);
+					var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), Constants.PageSize * sizeOfItem);
+					stream.Read(pageAsSpan);
+					handle.Free();
+
+					block &= ~pageMasks[pageIndexMod];
+				}
 			}
 		}
 	}

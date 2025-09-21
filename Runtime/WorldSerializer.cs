@@ -7,7 +7,7 @@ namespace Massive.Serialization
 	public class WorldSerializer : IWorldSerializer
 	{
 		private readonly Dictionary<Type, IDataSerializer> _customSerializers = new Dictionary<Type, IDataSerializer>();
-		private readonly HashSet<SparseSet> _setsBuffer = new HashSet<SparseSet>();
+		private readonly HashSet<BitSet> _setsBuffer = new HashSet<BitSet>();
 		private readonly HashSet<Allocator> _allocatorsBuffer = new HashSet<Allocator>();
 		private int[] _remap = Array.Empty<int>();
 
@@ -30,14 +30,9 @@ namespace Massive.Serialization
 			// Sets.
 			_setsBuffer.Clear();
 			var setsToSerialize = _setsBuffer;
-			foreach (var sparseSet in world.Sets.AllSets)
+			foreach (var bitSet in world.Sets.AllSets)
 			{
-				var setType = world.Sets.TypeOf(sparseSet);
-				if (setType == null)
-				{
-					// Skip custom untyped sets (not supported yet).
-					continue;
-				}
+				var setType = world.Sets.TypeOf(bitSet);
 
 				// Check serialization attributes.
 				var needToSerialize = setType.IsDefined(typeof(NeedToSerialize), false);
@@ -51,7 +46,7 @@ namespace Massive.Serialization
 				if (SerializeMode == SerializeMode.AllExceptMarked && !doNotSerialize
 					|| SerializeMode == SerializeMode.OnlyMarked && needToSerialize)
 				{
-					setsToSerialize.Add(sparseSet);
+					setsToSerialize.Add(bitSet);
 				}
 			}
 
@@ -59,14 +54,14 @@ namespace Massive.Serialization
 			SerializationUtils.WriteInt(setsToSerialize.Count, stream);
 
 			// Serialize each set. Order doesn't matter.
-			foreach (var sparseSet in setsToSerialize)
+			foreach (var bitSet in setsToSerialize)
 			{
-				var setType = world.Sets.TypeOf(sparseSet);
+				var setType = world.Sets.TypeOf(bitSet);
 				SerializationUtils.WriteType(setType, stream);
-				SerializationUtils.WriteSparseSet(sparseSet, stream);
+				SerializationUtils.WriteBitSet(bitSet, stream);
 
 				// Only IDataSet has serializable data.
-				if (sparseSet is not IDataSet dataSet)
+				if (bitSet is not IDataSet dataSet)
 				{
 					continue;
 				}
@@ -74,18 +69,18 @@ namespace Massive.Serialization
 				// Use custom serializer if registered.
 				if (_customSerializers.TryGetValue(setType, out var customSerializer))
 				{
-					customSerializer.Write(dataSet.Data, sparseSet.Count, stream);
+					customSerializer.Write(dataSet, bitSet, stream);
 					continue;
 				}
 
 				// Fallback to default serializers for managed/unmanaged types.
-				if (dataSet.Data.ElementType.IsUnmanaged())
+				if (dataSet.ElementType.IsUnmanaged())
 				{
-					DefaultUnmanagedSerializer.Write(dataSet.Data, sparseSet.Count, stream);
+					DefaultUnmanagedSerializer.Write(dataSet, bitSet, stream);
 				}
 				else
 				{
-					DefaultManagedSerializer.Write(dataSet.Data, sparseSet.Count, stream);
+					DefaultManagedSerializer.Write(dataSet, bitSet, stream);
 				}
 			}
 
@@ -115,13 +110,13 @@ namespace Massive.Serialization
 			for (var i = 0; i < setCount; i++)
 			{
 				var setType = SerializationUtils.ReadType(stream);
-				var sparseSet = world.Sets.GetReflected(setType);
-				deserializedSets.Add(sparseSet);
+				var bitSet = world.Sets.GetReflected(setType);
+				deserializedSets.Add(bitSet);
 
-				SerializationUtils.ReadSparseSet(sparseSet, stream);
+				SerializationUtils.ReadBitSet(bitSet, stream);
 
 				// Only IDataSet has serializable data.
-				if (sparseSet is not IDataSet dataSet)
+				if (bitSet is not IDataSet dataSet)
 				{
 					continue;
 				}
@@ -129,26 +124,26 @@ namespace Massive.Serialization
 				// Use custom deserializer if registered.
 				if (_customSerializers.TryGetValue(setType, out var customSerializer))
 				{
-					customSerializer.Read(dataSet.Data, sparseSet.Count, stream);
+					customSerializer.Read(dataSet, bitSet, stream);
 					continue;
 				}
 
 				// Fallback to default deserializers for managed/unmanaged types.
-				if (dataSet.Data.ElementType.IsUnmanaged())
+				if (dataSet.ElementType.IsUnmanaged())
 				{
-					DefaultUnmanagedSerializer.Read(dataSet.Data, sparseSet.Count, stream);
+					DefaultUnmanagedSerializer.Read(dataSet, bitSet, stream);
 				}
 				else
 				{
-					DefaultManagedSerializer.Read(dataSet.Data, sparseSet.Count, stream);
+					DefaultManagedSerializer.Read(dataSet, bitSet, stream);
 				}
 			}
 			// Clear all sets that weren't deserialized.
-			foreach (var sparseSet in world.Sets.AllSets)
+			foreach (var bitSet in world.Sets.AllSets)
 			{
-				if (!deserializedSets.Contains(sparseSet))
+				if (!deserializedSets.Contains(bitSet))
 				{
-					sparseSet.ClearWithoutNotify();
+					bitSet.ClearWithoutNotify();
 				}
 			}
 

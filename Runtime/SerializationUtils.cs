@@ -12,71 +12,71 @@ namespace Massive.Serialization
 	{
 		public static void WriteEntities(Entities entities, Stream stream)
 		{
-			var state = entities.CurrentState;
-			WriteInt(state.Count, stream);
-			WriteInt(state.UsedIds, stream);
-			WriteInt(state.NextHoleId, stream);
-			WriteByte((byte)state.Packing, stream);
-
-			stream.Write(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, entities.UsedIds)));
-			stream.Write(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, entities.UsedIds)));
-			stream.Write(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, entities.UsedIds)));
+			// var state = entities.CurrentState;
+			// WriteInt(state.Count, stream);
+			// WriteInt(state.UsedIds, stream);
+			// WriteInt(state.NextHoleId, stream);
+			// WriteByte((byte)state.Packing, stream);
+			//
+			// stream.Write(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, entities.UsedIds)));
+			// stream.Write(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, entities.UsedIds)));
+			// stream.Write(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, entities.UsedIds)));
 		}
 
 		public static void ReadEntities(Entities entities, Stream stream)
 		{
-			var state = new Entities.State(
-				ReadInt(stream),
-				ReadInt(stream),
-				ReadInt(stream),
-				(Packing)ReadByte(stream));
-
-			entities.EnsureCapacityAt(state.UsedIds);
-
-			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, state.UsedIds)));
-			stream.Read(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, state.UsedIds)));
-			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, state.UsedIds)));
-
-			if (state.UsedIds < entities.UsedIds)
-			{
-				Array.Fill(entities.Versions, 1U, state.UsedIds, entities.UsedIds - state.UsedIds);
-			}
-
-			entities.CurrentState = state;
+			// var state = new Entifiers.State(
+			// 	ReadInt(stream),
+			// 	ReadInt(stream),
+			// 	ReadInt(stream),
+			// 	(Packing)ReadByte(stream));
+			//
+			// entities.EnsureCapacityAt(state.UsedIds);
+			//
+			// stream.Read(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, state.UsedIds)));
+			// stream.Read(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, state.UsedIds)));
+			// stream.Read(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, state.UsedIds)));
+			//
+			// if (state.UsedIds < entities.UsedIds)
+			// {
+			// 	Array.Fill(entities.Versions, 1U, state.UsedIds, entities.UsedIds - state.UsedIds);
+			// }
+			//
+			// entities.CurrentState = state;
 		}
 
-		public static void WriteSparseSet(SparseSet set, Stream stream)
+		public static void WriteBitSet(BitSet set, Stream stream)
 		{
-			var state = set.CurrentState;
-			WriteInt(state.Count, stream);
-			WriteInt(state.UsedIds, stream);
-			WriteInt(state.NextHole, stream);
-			WriteByte((byte)state.Packing, stream);
-
-			stream.Write(MemoryMarshal.Cast<int, byte>(set.Packed.AsSpan(0, set.Count)));
-			stream.Write(MemoryMarshal.Cast<int, byte>(set.Sparse.AsSpan(0, set.UsedIds)));
+			// var state = set.CurrentState;
+			// WriteInt(state.Count, stream);
+			// WriteInt(state.UsedIds, stream);
+			// WriteInt(state.NextHole, stream);
+			// WriteByte((byte)state.Packing, stream);
+			//
+			// stream.Write(MemoryMarshal.Cast<int, byte>(set.Packed.AsSpan(0, set.Count)));
+			// stream.Write(MemoryMarshal.Cast<int, byte>(set.Sparse.AsSpan(0, set.UsedIds)));
 		}
 
-		public static void ReadSparseSet(SparseSet set, Stream stream)
+		public static void ReadBitSet(BitSet set, Stream stream)
 		{
-			var state = new SparseSet.State(
-				ReadInt(stream),
-				ReadInt(stream),
-				ReadInt(stream),
-				(Packing)ReadByte(stream));
-
-			set.EnsurePackedAt(state.Count - 1);
-			set.EnsureSparseAt(state.UsedIds - 1);
-
-			stream.Read(MemoryMarshal.Cast<int, byte>(set.Packed.AsSpan(0, state.Count)));
-			stream.Read(MemoryMarshal.Cast<int, byte>(set.Sparse.AsSpan(0, state.UsedIds)));
-
-			if (state.UsedIds < set.UsedIds)
-			{
-				Array.Fill(set.Sparse, Constants.InvalidId, state.UsedIds, set.UsedIds - state.UsedIds);
-			}
-
-			set.CurrentState = state;
+			// var state = new SparseSet.State(
+			// 	ReadInt(stream),
+			// 	ReadInt(stream),
+			// 	ReadInt(stream),
+			// 	(Packing)ReadByte(stream));
+			//
+			// set.EnsurePackedAt(state.Count - 1);
+			// set.EnsureSparseAt(state.UsedIds - 1);
+			//
+			// stream.Read(MemoryMarshal.Cast<int, byte>(set.Packed.AsSpan(0, state.Count)));
+			// stream.Read(MemoryMarshal.Cast<int, byte>(set.Sparse.AsSpan(0, state.UsedIds)));
+			//
+			// if (state.UsedIds < set.UsedIds)
+			// {
+			// 	Array.Fill(set.Sparse, Constants.InvalidId, state.UsedIds, set.UsedIds - state.UsedIds);
+			// }
+			//
+			// set.CurrentState = state;
 		}
 
 		public static unsafe void WriteAllocator(Allocator allocator, Stream stream)
