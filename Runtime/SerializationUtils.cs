@@ -12,71 +12,65 @@ namespace Massive.Serialization
 	{
 		public static void WriteEntities(Entities entities, Stream stream)
 		{
-			// var state = entities.CurrentState;
-			// WriteInt(state.Count, stream);
-			// WriteInt(state.UsedIds, stream);
-			// WriteInt(state.NextHoleId, stream);
-			// WriteByte((byte)state.Packing, stream);
-			//
-			// stream.Write(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, entities.UsedIds)));
-			// stream.Write(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, entities.UsedIds)));
-			// stream.Write(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, entities.UsedIds)));
+			WriteBitSet(entities, stream);
+
+			var state = entities.CurrentState;
+			WriteInt(state.PooledIds, stream);
+			WriteInt(state.UsedIds, stream);
+
+			stream.Write(MemoryMarshal.Cast<int, byte>(entities.Pool.AsSpan(0, state.PooledIds)));
+			stream.Write(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, state.UsedIds)));
 		}
 
 		public static void ReadEntities(Entities entities, Stream stream)
 		{
-			// var state = new Entifiers.State(
-			// 	ReadInt(stream),
-			// 	ReadInt(stream),
-			// 	ReadInt(stream),
-			// 	(Packing)ReadByte(stream));
-			//
-			// entities.EnsureCapacityAt(state.UsedIds);
-			//
-			// stream.Read(MemoryMarshal.Cast<int, byte>(entities.Packed.AsSpan(0, state.UsedIds)));
-			// stream.Read(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, state.UsedIds)));
-			// stream.Read(MemoryMarshal.Cast<int, byte>(entities.Sparse.AsSpan(0, state.UsedIds)));
-			//
-			// if (state.UsedIds < entities.UsedIds)
-			// {
-			// 	Array.Fill(entities.Versions, 1U, state.UsedIds, entities.UsedIds - state.UsedIds);
-			// }
-			//
-			// entities.CurrentState = state;
+			ReadBitSet(entities, stream);
+
+			var state = new Entities.State(
+				ReadInt(stream),
+				ReadInt(stream));
+
+			entities.EnsurePoolAt(state.PooledIds - 1);
+			entities.EnsureEntityAt(state.UsedIds - 1);
+
+			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Pool.AsSpan(0, state.PooledIds)));
+			stream.Read(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, state.UsedIds)));
+
+			if (state.UsedIds < entities.UsedIds)
+			{
+				Array.Fill(entities.Versions, 1U, state.UsedIds, entities.UsedIds - state.UsedIds);
+			}
+
+			entities.CurrentState = state;
 		}
 
-		public static void WriteBitSet(BitSet set, Stream stream)
+		public static void WriteBitSet(BitSetBase set, Stream stream)
 		{
-			// var state = set.CurrentState;
-			// WriteInt(state.Count, stream);
-			// WriteInt(state.UsedIds, stream);
-			// WriteInt(state.NextHole, stream);
-			// WriteByte((byte)state.Packing, stream);
-			//
-			// stream.Write(MemoryMarshal.Cast<int, byte>(set.Packed.AsSpan(0, set.Count)));
-			// stream.Write(MemoryMarshal.Cast<int, byte>(set.Sparse.AsSpan(0, set.UsedIds)));
+			var blocksLength = set.NonEmptyBlocks.Length;
+			WriteInt(blocksLength, stream);
+
+			stream.Write(MemoryMarshal.Cast<ulong, byte>(set.NonEmptyBlocks.AsSpan(0, blocksLength)));
+			stream.Write(MemoryMarshal.Cast<ulong, byte>(set.SaturatedBlocks.AsSpan(0, blocksLength)));
+			stream.Write(MemoryMarshal.Cast<ulong, byte>(set.Bits.AsSpan(0, blocksLength << 6)));
 		}
 
-		public static void ReadBitSet(BitSet set, Stream stream)
+		public static void ReadBitSet(BitSetBase set, Stream stream)
 		{
-			// var state = new SparseSet.State(
-			// 	ReadInt(stream),
-			// 	ReadInt(stream),
-			// 	ReadInt(stream),
-			// 	(Packing)ReadByte(stream));
-			//
-			// set.EnsurePackedAt(state.Count - 1);
-			// set.EnsureSparseAt(state.UsedIds - 1);
-			//
-			// stream.Read(MemoryMarshal.Cast<int, byte>(set.Packed.AsSpan(0, state.Count)));
-			// stream.Read(MemoryMarshal.Cast<int, byte>(set.Sparse.AsSpan(0, state.UsedIds)));
-			//
-			// if (state.UsedIds < set.UsedIds)
-			// {
-			// 	Array.Fill(set.Sparse, Constants.InvalidId, state.UsedIds, set.UsedIds - state.UsedIds);
-			// }
-			//
-			// set.CurrentState = state;
+			var prevBlocksLength = set.NonEmptyBlocks.Length;
+
+			var blocksLength = ReadInt(stream);
+			set.EnsureBlocksCapacity(blocksLength);
+
+			if (blocksLength < prevBlocksLength)
+			{
+				Array.Fill(set.NonEmptyBlocks, 0UL, blocksLength, prevBlocksLength - blocksLength);
+				Array.Fill(set.SaturatedBlocks, 0UL, blocksLength, prevBlocksLength - blocksLength);
+				Array.Fill(set.Bits, 0UL, blocksLength << 6, (prevBlocksLength - blocksLength) << 6);
+			}
+
+			stream.Read(MemoryMarshal.Cast<ulong, byte>(set.NonEmptyBlocks.AsSpan(0, blocksLength)));
+			stream.Read(MemoryMarshal.Cast<ulong, byte>(set.SaturatedBlocks.AsSpan(0, blocksLength)));
+			stream.Read(MemoryMarshal.Cast<ulong, byte>(set.Bits.AsSpan(0, blocksLength << 6)));
 		}
 
 		public static unsafe void WriteAllocator(Allocator allocator, Stream stream)

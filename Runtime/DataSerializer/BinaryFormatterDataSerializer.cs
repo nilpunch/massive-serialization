@@ -12,7 +12,7 @@ namespace Massive.Serialization
 		public void Write(IDataSet dataSet, BitSet bitSet, Stream stream)
 		{
 			var binaryFormatter = new BinaryFormatter();
-			var buffer = Array.CreateInstance(dataSet.ElementType, 16);
+			var buffer = Array.CreateInstance(dataSet.ElementType, 0);
 			var count = 0;
 
 			var blocksLength = bitSet.NonEmptyBlocks.Length;
@@ -30,9 +30,9 @@ namespace Massive.Serialization
 
 					var pageIndex = pageOffset + pageIndexMod;
 
-					if (count >= buffer.Length)
+					if (count >= buffer.Length >> Constants.PageSizePower)
 					{
-						var growBuffer = Array.CreateInstance(dataSet.ElementType, buffer.Length << 1);
+						var growBuffer = Array.CreateInstance(dataSet.ElementType, Constants.PageSize * (count + 1) << 1);
 						buffer.CopyTo(growBuffer, 0);
 						buffer = growBuffer;
 					}
