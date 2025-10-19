@@ -30,7 +30,7 @@ namespace Massive.Serialization
 			// Sets.
 			_setsBuffer.Clear();
 			var setsToSerialize = _setsBuffer;
-			foreach (var bitSet in world.Sets.AllSets)
+			foreach (var bitSet in world.Sets.Sorted)
 			{
 				var setType = world.Sets.TypeOf(bitSet);
 
@@ -53,7 +53,7 @@ namespace Massive.Serialization
 			// Write set count.
 			SerializationUtils.WriteInt(setsToSerialize.Count, stream);
 
-			// Serialize each set. Order doesn't matter.
+			// Serialize each set.
 			foreach (var bitSet in setsToSerialize)
 			{
 				var setType = world.Sets.TypeOf(bitSet);
@@ -138,12 +138,24 @@ namespace Massive.Serialization
 					DefaultManagedSerializer.Read(dataSet, bitSet, stream);
 				}
 			}
-			// Clear all sets that weren't deserialized.
-			foreach (var bitSet in world.Sets.AllSets)
+
+			// Clear all sets that weren't deserialized and update components.
+			var componentsBitMap = world.Components.BitMap;
+			var componentsMaskLength = world.Components.MaskLength;
+			Array.Fill(componentsBitMap, 0UL);
+			foreach (var bitSet in world.Sets.Sorted)
 			{
 				if (!deserializedSets.Contains(bitSet))
 				{
 					bitSet.ClearWithoutNotify();
+					continue;
+				}
+
+				var componentIndex = bitSet.ComponentIndex;
+				var componentMask = bitSet.ComponentMask;
+				foreach (var id in bitSet)
+				{
+					componentsBitMap[id * componentsMaskLength + componentIndex] |= componentMask;
 				}
 			}
 

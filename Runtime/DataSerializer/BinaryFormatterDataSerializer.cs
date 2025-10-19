@@ -15,7 +15,7 @@ namespace Massive.Serialization
 			var buffer = Array.CreateInstance(dataSet.ElementType, 0);
 			var count = 0;
 
-			var blocksLength = bitSet.NonEmptyBlocks.Length;
+			var blocksLength = bitSet.BlocksCapacity;
 
 			var pageMasks = Constants.PageMasks;
 			var deBruijn = MathUtils.DeBruijn;
@@ -52,7 +52,7 @@ namespace Massive.Serialization
 			var buffer = (Array)binaryFormatter.Deserialize(stream);
 			var count = 0;
 
-			var blocksLength = bitSet.NonEmptyBlocks.Length;
+			var blocksLength = bitSet.BlocksCapacity;
 
 			var pageMasks = Constants.PageMasks;
 			var deBruijn = MathUtils.DeBruijn;

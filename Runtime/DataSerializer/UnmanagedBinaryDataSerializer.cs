@@ -13,7 +13,7 @@ namespace Massive.Serialization
 			var underlyingType = dataSet.ElementType.IsEnum ? Enum.GetUnderlyingType(dataSet.ElementType) : dataSet.ElementType;
 			var sizeOfItem = SerializationUtils.SizeOfUnmanaged(underlyingType);
 
-			var blocksLength = bitSet.NonEmptyBlocks.Length;
+			var blocksLength = bitSet.BlocksCapacity;
 
 			var pageMasks = Constants.PageMasks;
 			var deBruijn = MathUtils.DeBruijn;
@@ -43,7 +43,7 @@ namespace Massive.Serialization
 			var underlyingType = dataSet.ElementType.IsEnum ? Enum.GetUnderlyingType(dataSet.ElementType) : dataSet.ElementType;
 			var sizeOfItem = SerializationUtils.SizeOfUnmanaged(underlyingType);
 
-			var blocksLength = bitSet.NonEmptyBlocks.Length;
+			var blocksLength = bitSet.BlocksCapacity;
 
 			var pageMasks = Constants.PageMasks;
 			var deBruijn = MathUtils.DeBruijn;

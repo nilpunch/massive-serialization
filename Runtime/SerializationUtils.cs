@@ -46,7 +46,7 @@ namespace Massive.Serialization
 
 		public static void WriteBitSet(BitSetBase set, Stream stream)
 		{
-			var blocksLength = set.NonEmptyBlocks.Length;
+			var blocksLength = set.BlocksCapacity;
 			WriteInt(blocksLength, stream);
 
 			stream.Write(MemoryMarshal.Cast<ulong, byte>(set.NonEmptyBlocks.AsSpan(0, blocksLength)));
@@ -56,7 +56,7 @@ namespace Massive.Serialization
 
 		public static void ReadBitSet(BitSetBase set, Stream stream)
 		{
-			var prevBlocksLength = set.NonEmptyBlocks.Length;
+			var prevBlocksLength = set.BlocksCapacity;
 
 			var blocksLength = ReadInt(stream);
 			set.EnsureBlocksCapacity(blocksLength);
