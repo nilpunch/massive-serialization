@@ -80,13 +80,7 @@ namespace Massive.Serialization
 
 			stream.Write(MemoryMarshal.Cast<Chunk, byte>(allocator.Chunks.AsSpan(0, allocator.ChunkCount)));
 			stream.Write(MemoryMarshal.Cast<int, byte>(allocator.ChunkFreeLists.AsSpan()));
-
-			var underlyingType = allocator.ElementType.IsEnum ? Enum.GetUnderlyingType(allocator.ElementType) : allocator.ElementType;
-			var sizeOfItem = SizeOfUnmanaged(underlyingType);
-			var handle = GCHandle.Alloc(allocator.RawData, GCHandleType.Pinned);
-			var span = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), allocator.UsedSpace * sizeOfItem);
-			stream.Write(span);
-			handle.Free();
+			stream.Write(new Span<byte>(allocator.AlignedPtr, allocator.UsedSpace));
 		}
 
 		public static unsafe void ReadAllocator(Allocator allocator, Stream stream)
@@ -99,54 +93,44 @@ namespace Massive.Serialization
 
 			stream.Read(MemoryMarshal.Cast<Chunk, byte>(allocator.Chunks.AsSpan(0, chunkCount)));
 			stream.Read(MemoryMarshal.Cast<int, byte>(allocator.ChunkFreeLists.AsSpan()));
+			stream.Read(new Span<byte>(allocator.AlignedPtr, usedSpace));
 
 			if (chunkCount < allocator.ChunkCount)
 			{
 				Array.Fill(allocator.Chunks, Chunk.DefaultValid, chunkCount, allocator.ChunkCount - chunkCount);
 			}
 
-			var underlyingType = allocator.ElementType.IsEnum ? Enum.GetUnderlyingType(allocator.ElementType) : allocator.ElementType;
-			var sizeOfItem = SizeOfUnmanaged(underlyingType);
-			var handle = GCHandle.Alloc(allocator.RawData, GCHandleType.Pinned);
-			var span = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), usedSpace * sizeOfItem);
-			stream.Read(span);
-			handle.Free();
-
 			allocator.SetState(chunkCount, usedSpace);
 		}
 
-		public static void WriteAllocationTracker(Allocators allocators, Stream stream)
+		public static void WriteAllocationTracker(Allocator allocator, Stream stream)
 		{
-			WriteInt(allocators.UsedAllocations, stream);
-			WriteInt(allocators.NextFreeAllocation, stream);
-			WriteInt(allocators.UsedHeads, stream);
+			WriteInt(allocator.UsedAllocations, stream);
+			WriteInt(allocator.NextFreeAllocation, stream);
+			WriteInt(allocator.UsedHeads, stream);
 
-			stream.Write(MemoryMarshal.Cast<Allocators.Allocation, byte>(
-				allocators.Allocations.AsSpan(0, allocators.UsedAllocations)));
-			stream.Write(MemoryMarshal.Cast<int, byte>(
-				allocators.Heads.AsSpan(0, allocators.UsedHeads)));
+			stream.Write(MemoryMarshal.Cast<Allocator.Allocation, byte>(allocator.Allocations.AsSpan(0, allocator.UsedAllocations)));
+			stream.Write(MemoryMarshal.Cast<int, byte>(allocator.Heads.AsSpan(0, allocator.UsedHeads)));
 		}
 
-		public static void ReadAllocationTracker(Allocators allocators, Stream stream)
+		public static void ReadAllocationTracker(Allocator allocator, Stream stream)
 		{
 			var usedAllocations = ReadInt(stream);
 			var nextFreeAllocation = ReadInt(stream);
 			var usedHeads = ReadInt(stream);
 
-			allocators.EnsureTrackerAllocationAt(usedAllocations - 1);
-			allocators.EnsureTrackerHeadAt(usedHeads - 1);
+			allocator.EnsureTrackerAllocationAt(usedAllocations - 1);
+			allocator.EnsureTrackerHeadAt(usedHeads - 1);
 
-			stream.Read(MemoryMarshal.Cast<Allocators.Allocation, byte>(
-				allocators.Allocations.AsSpan(0, usedAllocations)));
-			stream.Read(MemoryMarshal.Cast<int, byte>(
-				allocators.Heads.AsSpan(0, usedHeads)));
+			stream.Read(MemoryMarshal.Cast<Allocator.Allocation, byte>(allocator.Allocations.AsSpan(0, usedAllocations)));
+			stream.Read(MemoryMarshal.Cast<int, byte>(allocator.Heads.AsSpan(0, usedHeads)));
 
-			if (usedHeads < allocators.UsedHeads)
+			if (usedHeads < allocator.UsedHeads)
 			{
-				Array.Fill(allocators.Heads, Constants.InvalidId, usedHeads, allocators.UsedHeads - usedHeads);
+				Array.Fill(allocator.Heads, Constants.InvalidId, usedHeads, allocator.UsedHeads - usedHeads);
 			}
 
-			allocators.SetTrackerState(usedAllocations, nextFreeAllocation, usedHeads);
+			allocator.SetTrackerState(usedAllocations, nextFreeAllocation, usedHeads);
 		}
 
 		public static void WriteInt(int value, Stream stream)

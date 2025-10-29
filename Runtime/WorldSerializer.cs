@@ -8,8 +8,6 @@ namespace Massive.Serialization
 	{
 		private readonly Dictionary<Type, IDataSerializer> _customSerializers = new Dictionary<Type, IDataSerializer>();
 		private readonly HashSet<BitSet> _setsBuffer = new HashSet<BitSet>();
-		private readonly HashSet<Allocator> _allocatorsBuffer = new HashSet<Allocator>();
-		private int[] _remap = Array.Empty<int>();
 
 		public SerializeMode SerializeMode { get; set; } = SerializeMode.AllExceptMarked;
 
@@ -85,17 +83,8 @@ namespace Massive.Serialization
 			}
 
 			// Allocators.
-			SerializationUtils.WriteInt(world.Allocators.AllAllocators.Count, stream);
-			foreach (var allocator in world.Allocators.AllAllocators)
-			{
-				var allocatorType = world.Allocators.TypeOf(allocator);
-				SerializationUtils.WriteType(allocatorType, stream);
-				SerializationUtils.WriteInt(allocator.AllocatorId, stream); // Store non-deterministic ID for remapping.
-				SerializationUtils.WriteAllocator(allocator, stream);
-			}
-
-			// Allocation tracker.
-			SerializationUtils.WriteAllocationTracker(world.Allocators, stream);
+			SerializationUtils.WriteAllocator(world.Allocator, stream);
+			SerializationUtils.WriteAllocationTracker(world.Allocator, stream);
 		}
 
 		public void Deserialize(World world, Stream stream)
@@ -160,44 +149,8 @@ namespace Massive.Serialization
 			}
 
 			// Allocators.
-			_allocatorsBuffer.Clear();
-			var deserializedAllocators = _allocatorsBuffer;
-			var allocatorCount = SerializationUtils.ReadInt(stream);
-			for (var i = 0; i < allocatorCount; i++)
-			{
-				var allocatorType = SerializationUtils.ReadType(stream);
-				var sourceAllocatorId = SerializationUtils.ReadInt(stream);
-
-				var allocator = world.Allocators.GetReflected(allocatorType);
-				deserializedAllocators.Add(allocator);
-
-				// Grow remap buffer if needed.
-				if (sourceAllocatorId >= _remap.Length)
-				{
-					_remap = _remap.Resize(MathUtils.NextPowerOf2(sourceAllocatorId + 1));
-				}
-				_remap[sourceAllocatorId] = allocator.AllocatorId;
-
-				SerializationUtils.ReadAllocator(allocator, stream);
-			}
-			// Reset all allocators that weren't deserialized.
-			foreach (var allocator in world.Allocators.AllAllocators)
-			{
-				if (!deserializedAllocators.Contains(allocator))
-				{
-					allocator.Reset();
-				}
-			}
-
-			// Allocation tracker.
-			SerializationUtils.ReadAllocationTracker(world.Allocators, stream);
-
-			// Remap all tracked allocations to local IDs for compatibility.
-			for (var i = 0; i < world.Allocators.UsedAllocations; i++)
-			{
-				ref var allocation = ref world.Allocators.Allocations[i];
-				allocation.AllocatorId = _remap[allocation.AllocatorId];
-			}
+			SerializationUtils.ReadAllocator(world.Allocator, stream);
+			SerializationUtils.ReadAllocationTracker(world.Allocator, stream);
 		}
 	}
 }
