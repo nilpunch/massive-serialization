@@ -11,7 +11,7 @@ namespace Massive.Serialization
 		public unsafe void Write(IDataSet dataSet, BitSet bitSet, Stream stream)
 		{
 			var underlyingType = dataSet.ElementType.IsEnum ? Enum.GetUnderlyingType(dataSet.ElementType) : dataSet.ElementType;
-			var sizeOfItem = SerializationUtils.SizeOfUnmanaged(underlyingType);
+			var sizeOfItem = ReflectionUtils.SizeOfUnmanaged(underlyingType);
 
 			var blocksLength = bitSet.BlocksCapacity;
 
@@ -41,7 +41,7 @@ namespace Massive.Serialization
 		public unsafe void Read(IDataSet dataSet, BitSet bitSet, Stream stream)
 		{
 			var underlyingType = dataSet.ElementType.IsEnum ? Enum.GetUnderlyingType(dataSet.ElementType) : dataSet.ElementType;
-			var sizeOfItem = SerializationUtils.SizeOfUnmanaged(underlyingType);
+			var sizeOfItem = ReflectionUtils.SizeOfUnmanaged(underlyingType);
 
 			var blocksLength = bitSet.BlocksCapacity;
 

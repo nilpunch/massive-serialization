@@ -84,7 +84,6 @@ namespace Massive.Serialization
 
 			// Allocators.
 			SerializationUtils.WriteAllocator(world.Allocator, stream);
-			SerializationUtils.WriteAllocationTracker(world.Allocator, stream);
 		}
 
 		public void Deserialize(World world, Stream stream)
@@ -150,7 +149,6 @@ namespace Massive.Serialization
 
 			// Allocators.
 			SerializationUtils.ReadAllocator(world.Allocator, stream);
-			SerializationUtils.ReadAllocationTracker(world.Allocator, stream);
 		}
 	}
 }

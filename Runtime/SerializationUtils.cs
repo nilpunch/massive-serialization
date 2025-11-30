@@ -75,62 +75,45 @@ namespace Massive.Serialization
 
 		public static unsafe void WriteAllocator(Allocator allocator, Stream stream)
 		{
-			WriteInt(allocator.ChunkCount, stream);
-			WriteInt(allocator.UsedSpace, stream);
+			WriteInt(allocator.PageCount, stream);
 
-			stream.Write(MemoryMarshal.Cast<Chunk, byte>(allocator.Chunks.AsSpan(0, allocator.ChunkCount)));
-			stream.Write(MemoryMarshal.Cast<int, byte>(allocator.ChunkFreeLists.AsSpan()));
-			stream.Write(new Span<byte>(allocator.AlignedPtr, allocator.UsedSpace));
+			stream.Write(new Span<byte>(allocator.Pages[0].AlignedPtr, allocator.Pages[0].FullPageLength));
+
+			for (var i = 1; i < allocator.PageCount; i++)
+			{
+				ref var page = ref allocator.Pages[i];
+				WriteInt(page.SlotClass, stream);
+				stream.Write(new Span<byte>(page.AlignedPtr, page.FullPageLength));
+			}
+
+			stream.Write(MemoryMarshal.Cast<Pointer, byte>(allocator.NextToAlloc.AsSpan(0, Allocator.AllClassCount)));
+			stream.Write(MemoryMarshal.Cast<Pointer, byte>(allocator.FreeToAlloc.AsSpan(0, Allocator.AllClassCount)));
 		}
 
 		public static unsafe void ReadAllocator(Allocator allocator, Stream stream)
 		{
-			var chunkCount = ReadInt(stream);
-			var usedSpace = ReadInt(stream);
+			var pageCount = ReadInt(stream);
 
-			allocator.EnsureChunkAt(chunkCount - 1);
-			allocator.EnsureDataCapacity(usedSpace);
+			allocator.Reset();
+			allocator.EnsurePageAt(pageCount - 1);
+			allocator.SetPageCount((ushort)pageCount);
 
-			stream.Read(MemoryMarshal.Cast<Chunk, byte>(allocator.Chunks.AsSpan(0, chunkCount)));
-			stream.Read(MemoryMarshal.Cast<int, byte>(allocator.ChunkFreeLists.AsSpan()));
-			stream.Read(new Span<byte>(allocator.AlignedPtr, usedSpace));
+			stream.Read(new Span<byte>(allocator.Pages[0].AlignedPtr, allocator.Pages[0].FullPageLength));
 
-			if (chunkCount < allocator.ChunkCount)
+			for (var i = 1; i < pageCount; i++)
 			{
-				Array.Fill(allocator.Chunks, Chunk.DefaultValid, chunkCount, allocator.ChunkCount - chunkCount);
+				ref var page = ref allocator.Pages[i];
+
+				var slotClass = ReadInt(stream);
+				var pageLength = Allocator.PageLength(slotClass);
+				var bitSetLength = Allocator.BitSetLength(slotClass);
+
+				page = new Allocator.Page(UnsafeUtils.AllocAligned(pageLength + bitSetLength, Allocator.MinPageLength), slotClass);
+				stream.Read(new Span<byte>(page.AlignedPtr, page.FullPageLength));
 			}
 
-			allocator.SetState(chunkCount, usedSpace);
-		}
-
-		public static void WriteAllocationTracker(Allocator allocator, Stream stream)
-		{
-			WriteInt(allocator.UsedAllocations, stream);
-			WriteInt(allocator.NextFreeAllocation, stream);
-			WriteInt(allocator.UsedHeads, stream);
-
-			stream.Write(MemoryMarshal.Cast<Allocator.Allocation, byte>(allocator.Allocations.AsSpan(0, allocator.UsedAllocations)));
-			stream.Write(MemoryMarshal.Cast<int, byte>(allocator.Heads.AsSpan(0, allocator.UsedHeads)));
-		}
-
-		public static void ReadAllocationTracker(Allocator allocator, Stream stream)
-		{
-			var usedAllocations = ReadInt(stream);
-			var nextFreeAllocation = ReadInt(stream);
-			var usedHeads = ReadInt(stream);
-
-			allocator.EnsureTrackerAllocationAt(usedAllocations - 1);
-			allocator.EnsureTrackerHeadAt(usedHeads - 1);
-
-			stream.Read(MemoryMarshal.Cast<Allocator.Allocation, byte>(allocator.Allocations.AsSpan(0, usedAllocations)));
-			stream.Read(MemoryMarshal.Cast<int, byte>(allocator.Heads.AsSpan(0, usedHeads)));
-
-			if (usedHeads < allocator.UsedHeads)
-			{
-				Array.Fill(allocator.Heads, Constants.InvalidId, usedHeads, allocator.UsedHeads - usedHeads);
-			}
-
-			allocator.SetTrackerState(usedAllocations, nextFreeAllocation, usedHeads);
+			stream.Read(MemoryMarshal.Cast<Pointer, byte>(allocator.NextToAlloc.AsSpan(0, Allocator.AllClassCount)));
+			stream.Read(MemoryMarshal.Cast<Pointer, byte>(allocator.FreeToAlloc.AsSpan(0, Allocator.AllClassCount)));
 		}
 
 		public static void WriteInt(int value, Stream stream)
@@ -193,24 +176,6 @@ namespace Massive.Serialization
 
 			var typeName = Encoding.UTF8.GetString(nameBuffer);
 			return Type.GetType(typeName, true);
-		}
-
-		private static readonly Dictionary<Type, int> s_sizeOfCache = new Dictionary<Type, int>();
-
-		private static unsafe int SizeOf<T>() where T : unmanaged => sizeof(T);
-
-		public static int SizeOfUnmanaged(Type t)
-		{
-			if (!s_sizeOfCache.TryGetValue(t, out var size))
-			{
-				var genericMethod = typeof(SerializationUtils)
-					.GetMethod(nameof(SizeOf), BindingFlags.Static | BindingFlags.NonPublic)
-					.MakeGenericMethod(t);
-				size = (int)genericMethod.Invoke(null, new object[] { });
-				s_sizeOfCache.Add(t, size);
-			}
-
-			return size;
 		}
 	}
 }
