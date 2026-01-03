@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 
@@ -9,70 +8,51 @@ namespace Massive.Serialization
 	{
 		public static BinaryFormatterDataSerializer Instance { get; } = new BinaryFormatterDataSerializer();
 
+		public class WriteScope
+		{
+			public Array Buffer;
+			public int Count;
+		}
+
+		public class ReadScope
+		{
+			public int Count;
+		}
+
 		public void Write(IDataSet dataSet, BitSet bitSet, Stream stream)
 		{
 			var binaryFormatter = new BinaryFormatter();
-			var buffer = Array.CreateInstance(dataSet.ElementType, 0);
-			var count = 0;
 
-			var blocksLength = bitSet.BlocksCapacity;
+			var scope = new WriteScope();
+			scope.Buffer = Array.CreateInstance(dataSet.ElementType, 0);
 
-			var pageMasks = Constants.PageMasks;
-			var deBruijn = MathUtils.DeBruijn;
-			for (var blockIndex = 0; blockIndex < blocksLength; blockIndex++)
+			SerializationUtils.ForEachDataPage(dataSet, bitSet, pageIndex =>
 			{
-				var block = bitSet.NonEmptyBlocks[blockIndex];
-				var pageOffset = blockIndex << Constants.PagesInBlockPower;
-				while (block != 0UL)
+				if (scope.Count >= scope.Buffer.Length >> Constants.PageSizePower)
 				{
-					var blockBit = (int)deBruijn[(int)(((block & (ulong)-(long)block) * 0x37E84A99DAE458FUL) >> 58)];
-					var pageIndexMod = blockBit >> Constants.PageMaskShift;
-
-					var pageIndex = pageOffset + pageIndexMod;
-
-					if (count >= buffer.Length >> Constants.PageSizePower)
-					{
-						var growBuffer = Array.CreateInstance(dataSet.ElementType, Constants.PageSize * (count + 1) << 1);
-						buffer.CopyTo(growBuffer, 0);
-						buffer = growBuffer;
-					}
-
-					Array.Copy(dataSet.GetPage(pageIndex), 0, buffer, Constants.PageSize * count++, Constants.PageSize);
-
-					block &= ~pageMasks[pageIndexMod];
+					var growBuffer = Array.CreateInstance(dataSet.ElementType, Constants.PageSize * (scope.Count + 1) << 1);
+					scope.Buffer.CopyTo(growBuffer, 0);
+					scope.Buffer = growBuffer;
 				}
-			}
 
-			binaryFormatter.Serialize(stream, buffer);
+				Array.Copy(dataSet.GetPage(pageIndex), 0, scope.Buffer, Constants.PageSize * scope.Count++, Constants.PageSize);
+			});
+
+			binaryFormatter.Serialize(stream, scope.Buffer);
 		}
 
 		public void Read(IDataSet dataSet, BitSet bitSet, Stream stream)
 		{
 			var binaryFormatter = new BinaryFormatter();
 			var buffer = (Array)binaryFormatter.Deserialize(stream);
-			var count = 0;
+			var scope = new ReadScope();
 
-			var blocksLength = bitSet.BlocksCapacity;
-
-			var pageMasks = Constants.PageMasks;
-			var deBruijn = MathUtils.DeBruijn;
-			for (var blockIndex = 0; blockIndex < blocksLength; blockIndex++)
+			SerializationUtils.ForEachDataPage(dataSet, bitSet, pageIndex =>
 			{
-				var block = bitSet.NonEmptyBlocks[blockIndex];
-				var pageOffset = blockIndex << Constants.PagesInBlockPower;
-				while (block != 0UL)
-				{
-					var blockBit = (int)deBruijn[(int)(((block & (ulong)-(long)block) * 0x37E84A99DAE458FUL) >> 58)];
-					var pageIndexMod = blockBit >> Constants.PageMaskShift;
+				dataSet.EnsurePage(pageIndex);
 
-					var pageIndex = pageOffset + pageIndexMod;
-					dataSet.EnsurePage(pageIndex);
-
-					Array.Copy(buffer, Constants.PageSize * count++, dataSet.GetPage(pageIndex), 0, Constants.PageSize);
-
-					block &= ~pageMasks[pageIndexMod];
-				}
-			}
+				Array.Copy(buffer, Constants.PageSize * scope.Count++, dataSet.GetPage(pageIndex), 0, Constants.PageSize);
+			});
 		}
 	}
 }
