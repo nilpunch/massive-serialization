@@ -33,7 +33,7 @@ namespace Massive.Serialization
 
 				var handle = GCHandle.Alloc(dataSet.GetPage(pageIndex), GCHandleType.Pinned);
 				var pageAsSpan = new Span<byte>(handle.AddrOfPinnedObject().ToPointer(), Constants.PageSize * sizeOfItem);
-				stream.Read(pageAsSpan);
+				SerializationUtils.ReadExactly(stream, pageAsSpan);
 				handle.Free();
 			});
 		}

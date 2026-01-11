@@ -33,8 +33,8 @@ namespace Massive.Serialization
 			entities.EnsurePoolAt(state.PooledIds - 1);
 			entities.EnsureEntityAt(state.UsedIds - 1);
 
-			stream.Read(MemoryMarshal.Cast<int, byte>(entities.Pool.AsSpan(0, state.PooledIds)));
-			stream.Read(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, state.UsedIds)));
+			ReadExactly(stream, MemoryMarshal.Cast<int, byte>(entities.Pool.AsSpan(0, state.PooledIds)));
+			ReadExactly(stream, MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, state.UsedIds)));
 
 			if (state.UsedIds < entities.UsedIds)
 			{
@@ -68,11 +68,11 @@ namespace Massive.Serialization
 				Array.Fill(set.Bits, 0UL, blocksLength << 6, (prevBlocksLength - blocksLength) << 6);
 			}
 
-			stream.Read(MemoryMarshal.Cast<ulong, byte>(set.NonEmptyBlocks.AsSpan(0, blocksLength)));
-			stream.Read(MemoryMarshal.Cast<ulong, byte>(set.SaturatedBlocks.AsSpan(0, blocksLength)));
-			stream.Read(MemoryMarshal.Cast<ulong, byte>(set.Bits.AsSpan(0, blocksLength << 6)));
+			ReadExactly(stream, MemoryMarshal.Cast<ulong, byte>(set.NonEmptyBlocks.AsSpan(0, blocksLength)));
+			ReadExactly(stream, MemoryMarshal.Cast<ulong, byte>(set.SaturatedBlocks.AsSpan(0, blocksLength)));
+			ReadExactly(stream, MemoryMarshal.Cast<ulong, byte>(set.Bits.AsSpan(0, blocksLength << 6)));
 		}
-		
+
 		public static void ForEachDataPage(IDataSet dataSet, BitSetBase bitSet, Action<int> page)
 		{
 			var blocksLength = bitSet.BlocksCapacity;
@@ -121,7 +121,7 @@ namespace Massive.Serialization
 			allocator.EnsurePageAt(pageCount - 1);
 			allocator.SetPageCount((ushort)pageCount);
 
-			stream.Read(new Span<byte>(allocator.Pages[0].AlignedPtr, allocator.Pages[0].PageLengthWithBitset));
+			ReadExactly(stream, new Span<byte>(allocator.Pages[0].AlignedPtr, allocator.Pages[0].PageLengthWithBitset));
 
 			for (var i = 1; i < pageCount; i++)
 			{
@@ -132,11 +132,11 @@ namespace Massive.Serialization
 				var bitSetLength = Allocator.BitSetLength(slotClass);
 
 				page = new Allocator.Page(UnsafeUtils.AllocAligned(pageLength + bitSetLength, Allocator.MinPageLength), slotClass);
-				stream.Read(new Span<byte>(page.AlignedPtr, page.PageLengthWithBitset));
+				ReadExactly(stream, new Span<byte>(page.AlignedPtr, page.PageLengthWithBitset));
 			}
 
-			stream.Read(MemoryMarshal.Cast<Pointer, byte>(allocator.NextToAlloc.AsSpan(0, Allocator.AllClassCount)));
-			stream.Read(MemoryMarshal.Cast<Pointer, byte>(allocator.FreeToAlloc.AsSpan(0, Allocator.AllClassCount)));
+			ReadExactly(stream, MemoryMarshal.Cast<Pointer, byte>(allocator.NextToAlloc.AsSpan(0, Allocator.AllClassCount)));
+			ReadExactly(stream, MemoryMarshal.Cast<Pointer, byte>(allocator.FreeToAlloc.AsSpan(0, Allocator.AllClassCount)));
 		}
 
 		public static void WriteInt(int value, Stream stream)
@@ -149,7 +149,7 @@ namespace Massive.Serialization
 		public static int ReadInt(Stream stream)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(int)];
-			stream.Read(buffer);
+			ReadExactly(stream, buffer);
 			return BitConverter.ToInt32(buffer);
 		}
 
@@ -163,7 +163,7 @@ namespace Massive.Serialization
 		public static byte ReadByte(Stream stream)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(byte)];
-			stream.Read(buffer);
+			ReadExactly(stream, buffer);
 			return buffer[0];
 		}
 
@@ -177,7 +177,7 @@ namespace Massive.Serialization
 		public static bool ReadBool(Stream stream)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(bool)];
-			stream.Read(buffer);
+			ReadExactly(stream, buffer);
 			return BitConverter.ToBoolean(buffer);
 		}
 
@@ -195,10 +195,24 @@ namespace Massive.Serialization
 			var nameLength = ReadInt(stream);
 			var nameBuffer = new byte[nameLength];
 
-			stream.Read(nameBuffer);
+			ReadExactly(stream, nameBuffer);
 
 			var typeName = Encoding.UTF8.GetString(nameBuffer);
 			return Type.GetType(typeName, true);
+		}
+
+		public static void ReadExactly(Stream stream, Span<byte> buffer)
+		{
+			var read = 0;
+			while (read < buffer.Length)
+			{
+				var n = stream.Read(buffer.Slice(read));
+				if (n == 0)
+				{
+					throw new EndOfStreamException();
+				}
+				read += n;
+			}
 		}
 	}
 }

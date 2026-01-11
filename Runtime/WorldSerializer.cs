@@ -55,7 +55,7 @@ namespace Massive.Serialization
 				}
 			}
 
-			// Allocators.
+			// Allocator.
 			SerializationUtils.WriteAllocator(world.Allocator, stream);
 		}
 
@@ -71,8 +71,9 @@ namespace Massive.Serialization
 			{
 				var setType = SerializationUtils.ReadType(stream);
 				var bitSet = world.Sets.GetReflected(setType);
-
 				SerializationUtils.ReadBitSet(bitSet, stream);
+
+				world.Sets.EnsureBinded(bitSet);
 
 				// Only IDataSet has serializable data.
 				if (bitSet is not IDataSet dataSet)
@@ -98,12 +99,15 @@ namespace Massive.Serialization
 				}
 			}
 
+			// Allocator.
+			SerializationUtils.ReadAllocator(world.Allocator, stream);
+
 			// Clear components bitmap.
 			var componentsBitMap = world.Components.BitMap;
-			var componentsMaskLength = world.Components.MaskLength;
 			Array.Fill(componentsBitMap, 0UL);
 
 			// Fill components bitmap.
+			var componentsMaskLength = world.Components.MaskLength;
 			for (var i = 0; i < world.Sets.ComponentCount; i++)
 			{
 				var bitSet = world.Sets.LookupByComponentId[i];
@@ -115,9 +119,6 @@ namespace Massive.Serialization
 					componentsBitMap[id * componentsMaskLength + componentIndex] |= componentMask;
 				}
 			}
-
-			// Allocators.
-			SerializationUtils.ReadAllocator(world.Allocator, stream);
 		}
 	}
 }
