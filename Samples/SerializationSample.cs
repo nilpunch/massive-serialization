@@ -20,9 +20,7 @@ namespace Massive.Samples.Serialization
 
 			// By default, managed types are serialized using BinaryFormatter, which requires the [Serializable] attribute on the component.
 			// Custom serialization can be implemented like this:
-#if !NET9_0_OR_GREATER
-			worldSerializer.SetCustomSerializer(typeof(Inventory), new BinaryFormatterDataSerializer());
-#endif
+			worldSerializer.SetCustomSerializer(typeof(Inventory), DataContractDataSerializer.Instance);
 
 			// Save world to the file.
 			using (FileStream stream = new FileStream(PathToSaveFile, FileMode.Create, FileAccess.Write))
