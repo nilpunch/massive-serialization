@@ -11,7 +11,7 @@ namespace Massive.Serialization
 		public IDataSerializer DefaultUnmanagedSerializer { get; set; } = UnmanagedBinaryDataSerializer.Instance;
 
 		public IDataSerializer DefaultManagedSerializer { get; set; } =
-#if NET9_0_OR_GREATER
+#if NET9_0_OR_GREATER || GODOT
 			DataContractDataSerializer.Instance;
 #else
 			BinaryFormatterDataSerializer.Instance;

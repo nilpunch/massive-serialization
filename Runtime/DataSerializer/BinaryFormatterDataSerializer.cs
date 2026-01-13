@@ -1,4 +1,4 @@
-﻿#if !NET9_0_OR_GREATER
+﻿#if !NET9_0_OR_GREATER && !GODOT
 using System;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
