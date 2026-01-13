@@ -73,29 +73,6 @@ namespace Massive.Serialization
 			ReadExactly(stream, MemoryMarshal.Cast<ulong, byte>(set.Bits.AsSpan(0, blocksLength << 6)));
 		}
 
-		public static void ForEachDataPage(IDataSet dataSet, BitSetBase bitSet, Action<int> page)
-		{
-			var blocksLength = bitSet.BlocksCapacity;
-			var pageMasks = Constants.PageMasks;
-			var deBruijn = MathUtils.DeBruijn;
-			for (var blockIndex = 0; blockIndex < blocksLength; blockIndex++)
-			{
-				var block = bitSet.NonEmptyBlocks[blockIndex];
-				var pageOffset = blockIndex << Constants.PagesInBlockPower;
-				while (block != 0UL)
-				{
-					var blockBit = (int)deBruijn[(int)(((block & (ulong)-(long)block) * 0x37E84A99DAE458FUL) >> 58)];
-					var pageIndexMod = blockBit >> Constants.PageMaskShift;
-
-					var pageIndex = pageOffset + pageIndexMod;
-
-					page.Invoke(pageIndex);
-
-					block &= ~pageMasks[pageIndexMod];
-				}
-			}
-		}
-
 		public static unsafe void WriteAllocator(Allocator allocator, Stream stream)
 		{
 			WriteInt(allocator.PageCount, stream);

@@ -10,7 +10,12 @@ namespace Massive.Serialization
 
 		public IDataSerializer DefaultUnmanagedSerializer { get; set; } = UnmanagedBinaryDataSerializer.Instance;
 
-		public IDataSerializer DefaultManagedSerializer { get; set; } = BinaryFormatterDataSerializer.Instance;
+		public IDataSerializer DefaultManagedSerializer { get; set; } =
+#if NET9_0_OR_GREATER
+			DataContractDataSerializer.Instance;
+#else
+			BinaryFormatterDataSerializer.Instance;
+#endif
 
 		public void SetCustomSerializer(Type type, IDataSerializer dataSerializer)
 		{
@@ -40,18 +45,18 @@ namespace Massive.Serialization
 				// Use custom serializer if registered.
 				if (_customSerializers.TryGetValue(setType, out var customSerializer))
 				{
-					customSerializer.Write(dataSet, bitSet, stream);
+					customSerializer.Write(dataSet, stream);
 					continue;
 				}
 
 				// Fallback to default serializers for managed/unmanaged types.
 				if (dataSet.ElementType.IsUnmanaged())
 				{
-					DefaultUnmanagedSerializer.Write(dataSet, bitSet, stream);
+					DefaultUnmanagedSerializer.Write(dataSet, stream);
 				}
 				else
 				{
-					DefaultManagedSerializer.Write(dataSet, bitSet, stream);
+					DefaultManagedSerializer.Write(dataSet, stream);
 				}
 			}
 
@@ -84,18 +89,18 @@ namespace Massive.Serialization
 				// Use custom deserializer if registered.
 				if (_customSerializers.TryGetValue(setType, out var customSerializer))
 				{
-					customSerializer.Read(dataSet, bitSet, stream);
+					customSerializer.Read(dataSet, stream);
 					continue;
 				}
 
 				// Fallback to default deserializers for managed/unmanaged types.
 				if (dataSet.ElementType.IsUnmanaged())
 				{
-					DefaultUnmanagedSerializer.Read(dataSet, bitSet, stream);
+					DefaultUnmanagedSerializer.Read(dataSet, stream);
 				}
 				else
 				{
-					DefaultManagedSerializer.Read(dataSet, bitSet, stream);
+					DefaultManagedSerializer.Read(dataSet, stream);
 				}
 			}
 

@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if !NET9_0_OR_GREATER
+using System;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 
@@ -8,51 +9,40 @@ namespace Massive.Serialization
 	{
 		public static BinaryFormatterDataSerializer Instance { get; } = new BinaryFormatterDataSerializer();
 
-		public class WriteScope
-		{
-			public Array Buffer;
-			public int Count;
-		}
-
-		public class ReadScope
-		{
-			public int Count;
-		}
-
-		public void Write(IDataSet dataSet, BitSet bitSet, Stream stream)
+		public void Write(IDataSet dataSet, Stream stream)
 		{
 			var binaryFormatter = new BinaryFormatter();
+			var buffer = Array.CreateInstance(dataSet.ElementType, 0);
+			var count = 0;
 
-			var scope = new WriteScope();
-			scope.Buffer = Array.CreateInstance(dataSet.ElementType, 0);
-
-			SerializationUtils.ForEachDataPage(dataSet, bitSet, pageIndex =>
+			foreach (var pageIndex in dataSet.GetDataPages())
 			{
-				if (scope.Count >= scope.Buffer.Length >> Constants.PageSizePower)
+				if (count >= buffer.Length >> Constants.PageSizePower)
 				{
-					var growBuffer = Array.CreateInstance(dataSet.ElementType, Constants.PageSize * (scope.Count + 1) << 1);
-					scope.Buffer.CopyTo(growBuffer, 0);
-					scope.Buffer = growBuffer;
+					var growBuffer = Array.CreateInstance(dataSet.ElementType, Constants.PageSize * ((count + 1) << 1));
+					buffer.CopyTo(growBuffer, 0);
+					buffer = growBuffer;
 				}
 
-				Array.Copy(dataSet.GetPage(pageIndex), 0, scope.Buffer, Constants.PageSize * scope.Count++, Constants.PageSize);
-			});
+				Array.Copy(dataSet.GetPage(pageIndex), 0, buffer, Constants.PageSize * count++, Constants.PageSize);
+			}
 
-			binaryFormatter.Serialize(stream, scope.Buffer);
+			binaryFormatter.Serialize(stream, buffer);
 		}
 
-		public void Read(IDataSet dataSet, BitSet bitSet, Stream stream)
+		public void Read(IDataSet dataSet, Stream stream)
 		{
 			var binaryFormatter = new BinaryFormatter();
 			var buffer = (Array)binaryFormatter.Deserialize(stream);
-			var scope = new ReadScope();
+			var count = 0;
 
-			SerializationUtils.ForEachDataPage(dataSet, bitSet, pageIndex =>
+			foreach (var pageIndex in dataSet.GetDataPages())
 			{
 				dataSet.EnsurePage(pageIndex);
 
-				Array.Copy(buffer, Constants.PageSize * scope.Count++, dataSet.GetPage(pageIndex), 0, Constants.PageSize);
-			});
+				Array.Copy(buffer, Constants.PageSize * count++, dataSet.GetPage(pageIndex), 0, Constants.PageSize);
+			}
 		}
 	}
 }
+#endif
