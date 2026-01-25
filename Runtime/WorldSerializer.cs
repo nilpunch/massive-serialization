@@ -108,10 +108,10 @@ namespace Massive.Serialization
 			SerializationUtils.ReadAllocator(world.Allocator, stream);
 
 			// Clear components bitmap.
-			var componentsBitMap = world.Components.BitMap;
-			Array.Fill(componentsBitMap, 0UL);
+			world.Components.Reset();
 
 			// Fill components bitmap.
+			var componentsBitMap = world.Components.BitMap;
 			var componentsMaskLength = world.Components.MaskLength;
 			for (var i = 0; i < world.Sets.ComponentCount; i++)
 			{
