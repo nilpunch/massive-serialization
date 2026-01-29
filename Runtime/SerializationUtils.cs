@@ -130,6 +130,34 @@ namespace Massive.Serialization
 			return BitConverter.ToInt32(buffer);
 		}
 
+		public static void WriteDouble(double value, Stream stream)
+		{
+			Span<byte> buffer = stackalloc byte[sizeof(double)];
+			BitConverter.TryWriteBytes(buffer, value);
+			stream.Write(buffer);
+		}
+
+		public static double ReadDouble(Stream stream)
+		{
+			Span<byte> buffer = stackalloc byte[sizeof(double)];
+			ReadExactly(stream, buffer);
+			return BitConverter.ToDouble(buffer);
+		}
+
+		public static void WriteShort(short value, Stream stream)
+		{
+			Span<byte> buffer = stackalloc byte[sizeof(short)];
+			BitConverter.TryWriteBytes(buffer, value);
+			stream.Write(buffer);
+		}
+
+		public static short ReadShort(Stream stream)
+		{
+			Span<byte> buffer = stackalloc byte[sizeof(short)];
+			ReadExactly(stream, buffer);
+			return BitConverter.ToInt16(buffer);
+		}
+
 		public static void WriteByte(byte value, Stream stream)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(byte)];
