@@ -10,21 +10,21 @@ namespace Massive.Serialization
 {
 	public static class SerializationUtils
 	{
-		public static void WriteEntities(Entities entities, Stream stream)
+		public static void WriteEntities(this Stream stream, Entities entities)
 		{
-			WriteBitSet(entities, stream);
+			WriteBitSet(stream, entities);
 
 			var state = entities.CurrentState;
-			WriteInt(state.PooledIds, stream);
-			WriteInt(state.UsedIds, stream);
+			WriteInt(stream, state.PooledIds);
+			WriteInt(stream, state.UsedIds);
 
 			stream.Write(MemoryMarshal.Cast<int, byte>(entities.Pool.AsSpan(0, state.PooledIds)));
 			stream.Write(MemoryMarshal.Cast<uint, byte>(entities.Versions.AsSpan(0, state.UsedIds)));
 		}
 
-		public static void ReadEntities(Entities entities, Stream stream)
+		public static void ReadEntities(this Stream stream, Entities entities)
 		{
-			ReadBitSet(entities, stream);
+			ReadBitSet(stream, entities);
 
 			var state = new Entities.State(
 				ReadInt(stream),
@@ -44,17 +44,17 @@ namespace Massive.Serialization
 			entities.CurrentState = state;
 		}
 
-		public static void WriteBitSet(BitSetBase set, Stream stream)
+		public static void WriteBitSet(this Stream stream, BitSetBase set)
 		{
 			var blocksLength = set.BlocksCapacity;
-			WriteInt(blocksLength, stream);
+			WriteInt(stream, blocksLength);
 
 			stream.Write(MemoryMarshal.Cast<ulong, byte>(set.NonEmptyBlocks.AsSpan(0, blocksLength)));
 			stream.Write(MemoryMarshal.Cast<ulong, byte>(set.SaturatedBlocks.AsSpan(0, blocksLength)));
 			stream.Write(MemoryMarshal.Cast<ulong, byte>(set.Bits.AsSpan(0, blocksLength << 6)));
 		}
 
-		public static void ReadBitSet(BitSetBase set, Stream stream)
+		public static void ReadBitSet(this Stream stream, BitSetBase set)
 		{
 			var prevBlocksLength = set.BlocksCapacity;
 
@@ -73,16 +73,16 @@ namespace Massive.Serialization
 			ReadExactly(stream, MemoryMarshal.Cast<ulong, byte>(set.Bits.AsSpan(0, blocksLength << 6)));
 		}
 
-		public static unsafe void WriteAllocator(Allocator allocator, Stream stream)
+		public static unsafe void WriteAllocator(this Stream stream, Allocator allocator)
 		{
-			WriteInt(allocator.PageCount, stream);
+			WriteInt(stream, allocator.PageCount);
 
 			stream.Write(new Span<byte>(allocator.Pages[0].AlignedPtr, allocator.Pages[0].PageLengthWithBitset));
 
 			for (var i = 1; i < allocator.PageCount; i++)
 			{
 				ref var page = ref allocator.Pages[i];
-				WriteInt(page.SlotClass, stream);
+				WriteInt(stream, page.SlotClass);
 				stream.Write(new Span<byte>(page.AlignedPtr, page.PageLengthWithBitset));
 			}
 
@@ -90,7 +90,7 @@ namespace Massive.Serialization
 			stream.Write(MemoryMarshal.Cast<Pointer, byte>(allocator.FreeToAlloc.AsSpan(0, Allocator.AllClassCount)));
 		}
 
-		public static unsafe void ReadAllocator(Allocator allocator, Stream stream)
+		public static unsafe void ReadAllocator(this Stream stream, Allocator allocator)
 		{
 			var pageCount = ReadInt(stream);
 
@@ -116,86 +116,86 @@ namespace Massive.Serialization
 			ReadExactly(stream, MemoryMarshal.Cast<Pointer, byte>(allocator.FreeToAlloc.AsSpan(0, Allocator.AllClassCount)));
 		}
 
-		public static void WriteInt(int value, Stream stream)
+		public static void WriteInt(this Stream stream, int value)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(int)];
 			BitConverter.TryWriteBytes(buffer, value);
 			stream.Write(buffer);
 		}
 
-		public static int ReadInt(Stream stream)
+		public static int ReadInt(this Stream stream)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(int)];
 			ReadExactly(stream, buffer);
 			return BitConverter.ToInt32(buffer);
 		}
 
-		public static void WriteDouble(double value, Stream stream)
+		public static void WriteDouble(this Stream stream, double value)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(double)];
 			BitConverter.TryWriteBytes(buffer, value);
 			stream.Write(buffer);
 		}
 
-		public static double ReadDouble(Stream stream)
+		public static double ReadDouble(this Stream stream)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(double)];
 			ReadExactly(stream, buffer);
 			return BitConverter.ToDouble(buffer);
 		}
 
-		public static void WriteShort(short value, Stream stream)
+		public static void WriteShort(this Stream stream, short value)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(short)];
 			BitConverter.TryWriteBytes(buffer, value);
 			stream.Write(buffer);
 		}
 
-		public static short ReadShort(Stream stream)
+		public static short ReadShort(this Stream stream)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(short)];
 			ReadExactly(stream, buffer);
 			return BitConverter.ToInt16(buffer);
 		}
 
-		public static void WriteByte(byte value, Stream stream)
+		public static void WriteByte(this Stream stream, byte value)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(byte)];
 			buffer[0] = value;
 			stream.Write(buffer);
 		}
 
-		public static byte ReadByte(Stream stream)
+		public static byte ReadByte(this Stream stream)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(byte)];
 			ReadExactly(stream, buffer);
 			return buffer[0];
 		}
 
-		public static void WriteBool(bool value, Stream stream)
+		public static void WriteBool(this Stream stream, bool value)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(bool)];
 			BitConverter.TryWriteBytes(buffer, value);
 			stream.Write(buffer);
 		}
 
-		public static bool ReadBool(Stream stream)
+		public static bool ReadBool(this Stream stream)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(bool)];
 			ReadExactly(stream, buffer);
 			return BitConverter.ToBoolean(buffer);
 		}
 
-		public static void WriteType(Type type, Stream stream)
+		public static void WriteType(this Stream stream, Type type)
 		{
 			var typeName = type.AssemblyQualifiedName!;
 			var nameBuffer = Encoding.UTF8.GetBytes(typeName);
 
-			WriteInt(nameBuffer.Length, stream);
+			WriteInt(stream, nameBuffer.Length);
 			stream.Write(nameBuffer);
 		}
 
-		public static Type ReadType(Stream stream)
+		public static Type ReadType(this Stream stream)
 		{
 			var nameLength = ReadInt(stream);
 			var nameBuffer = new byte[nameLength];
@@ -206,7 +206,7 @@ namespace Massive.Serialization
 			return Type.GetType(typeName, true);
 		}
 
-		public static void ReadExactly(Stream stream, Span<byte> buffer)
+		public static void ReadExactly(this Stream stream, Span<byte> buffer)
 		{
 			var read = 0;
 			while (read < buffer.Length)

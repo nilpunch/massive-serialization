@@ -25,16 +25,16 @@ namespace Massive.Serialization
 		public void Serialize(World world, Stream stream)
 		{
 			// Entities.
-			SerializationUtils.WriteEntities(world.Entities, stream);
+			stream.WriteEntities(world.Entities);
 
 			// Sets.
-			SerializationUtils.WriteInt(world.Sets.ComponentCount, stream);
+			stream.WriteInt(world.Sets.ComponentCount);
 			for (var i = 0; i < world.Sets.ComponentCount; i++)
 			{
 				var bitSet = world.Sets.LookupByComponentId[i];
 				var setType = world.Sets.TypeOf(bitSet);
-				SerializationUtils.WriteType(setType, stream);
-				SerializationUtils.WriteBitSet(bitSet, stream);
+				stream.WriteType(setType);
+				stream.WriteBitSet(bitSet);
 
 				// Only IDataSet has serializable data.
 				if (bitSet is not IDataSet dataSet)
@@ -61,22 +61,22 @@ namespace Massive.Serialization
 			}
 
 			// Allocator.
-			SerializationUtils.WriteAllocator(world.Allocator, stream);
+			stream.WriteAllocator(world.Allocator);
 		}
 
 		public void Deserialize(World world, Stream stream)
 		{
 			// Entities.
-			SerializationUtils.ReadEntities(world.Entities, stream);
+			stream.ReadEntities(world.Entities);
 
 			// Sets.
 			world.Sets.Reset();
-			var setCount = SerializationUtils.ReadInt(stream);
+			var setCount = stream.ReadInt();
 			for (var i = 0; i < setCount; i++)
 			{
-				var setType = SerializationUtils.ReadType(stream);
+				var setType = stream.ReadType();
 				var bitSet = world.Sets.GetReflected(setType);
-				SerializationUtils.ReadBitSet(bitSet, stream);
+				stream.ReadBitSet(bitSet);
 
 				world.Sets.EnsureBinded(bitSet);
 
@@ -105,7 +105,7 @@ namespace Massive.Serialization
 			}
 
 			// Allocator.
-			SerializationUtils.ReadAllocator(world.Allocator, stream);
+			stream.ReadAllocator(world.Allocator);
 
 			// Clear components bitmap.
 			world.Components.Reset();
