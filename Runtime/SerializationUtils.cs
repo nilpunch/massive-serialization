@@ -158,14 +158,14 @@ namespace Massive.Serialization
 			return BitConverter.ToInt16(buffer);
 		}
 
-		public static void WriteByte(this Stream stream, byte value)
+		public static void Write1Byte(this Stream stream, byte value)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(byte)];
 			buffer[0] = value;
 			stream.Write(buffer);
 		}
 
-		public static byte ReadByte(this Stream stream)
+		public static byte Read1Byte(this Stream stream)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(byte)];
 			ReadExactly(stream, buffer);
