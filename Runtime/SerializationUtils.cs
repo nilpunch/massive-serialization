@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Buffers;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -128,6 +131,20 @@ namespace Massive.Serialization
 			return BitConverter.ToInt32(buffer);
 		}
 
+		public static void WriteULong(this Stream stream, ulong value)
+		{
+			Span<byte> buffer = stackalloc byte[sizeof(ulong)];
+			BitConverter.TryWriteBytes(buffer, value);
+			stream.Write(buffer);
+		}
+
+		public static ulong ReadULong(this Stream stream)
+		{
+			Span<byte> buffer = stackalloc byte[sizeof(ulong)];
+			ReadExactly(stream, buffer);
+			return BitConverter.ToUInt64(buffer);
+		}
+
 		public static void WriteDouble(this Stream stream, double value)
 		{
 			Span<byte> buffer = stackalloc byte[sizeof(double)];
@@ -184,24 +201,59 @@ namespace Massive.Serialization
 			return BitConverter.ToBoolean(buffer);
 		}
 
+		private static readonly Dictionary<Type, byte[]> s_typeToBytes = new();
+		private static readonly Dictionary<ulong, Type> s_hashToType = new();
+		private static readonly Dictionary<Type, ulong> s_typeToHash = new();
+
+		private static ulong GetStableHash(string str)
+		{
+			const ulong fnvOffset = 14695981039346656037;
+			const ulong fnvPrime = 1099511628211;
+			var hash = fnvOffset;
+			foreach (var c in str)
+			{
+				hash ^= c;
+				hash *= fnvPrime;
+			}
+			return hash;
+		}
+
 		public static void WriteType(this Stream stream, Type type)
 		{
-			var typeName = type.AssemblyQualifiedName!;
-			var nameBuffer = Encoding.UTF8.GetBytes(typeName);
+			if (!s_typeToBytes.TryGetValue(type, out var nameBuffer))
+			{
+				var typeName = type.AssemblyQualifiedName!;
+				nameBuffer = Encoding.UTF8.GetBytes(typeName);
+				s_typeToBytes[type] = nameBuffer;
+				var hash = GetStableHash(typeName);
+				s_hashToType[hash] = type;
+				s_typeToHash[type] = hash;
+			}
 
+			stream.WriteULong(s_typeToHash[type]);
 			WriteInt(stream, nameBuffer.Length);
 			stream.Write(nameBuffer);
 		}
 
 		public static Type ReadType(this Stream stream)
 		{
+			var hash = stream.ReadULong();
 			var nameLength = ReadInt(stream);
-			var nameBuffer = new byte[nameLength];
-
-			ReadExactly(stream, nameBuffer);
-
-			var typeName = Encoding.UTF8.GetString(nameBuffer);
-			return Type.GetType(typeName, true);
+			var nameBuffer = ArrayPool<byte>.Shared.Rent(nameLength);
+			try
+			{
+				ReadExactly(stream, nameBuffer);
+				if (!s_hashToType.TryGetValue(hash, out var type))
+				{
+					var typeName = Encoding.UTF8.GetString(nameBuffer, 0, nameLength);
+					type = Type.GetType(typeName, true);
+					s_typeToBytes[type] = nameBuffer.ToArray();
+					s_hashToType[hash] = type;
+					s_typeToHash[type] = hash;
+				}
+				return type;
+			}
+			finally { ArrayPool<byte>.Shared.Return(nameBuffer); }
 		}
 
 		public static void ReadExactly(this Stream stream, Span<byte> buffer)
