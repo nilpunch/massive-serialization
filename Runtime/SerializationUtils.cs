@@ -201,9 +201,9 @@ namespace Massive.Serialization
 			return BitConverter.ToBoolean(buffer);
 		}
 
-		private static readonly Dictionary<Type, byte[]> s_typeToBytes = new();
-		private static readonly Dictionary<ulong, Type> s_hashToType = new();
-		private static readonly Dictionary<Type, ulong> s_typeToHash = new();
+		private static readonly Dictionary<Type, byte[]> s_typeToBytes = new Dictionary<Type, byte[]>();
+		private static readonly Dictionary<ulong, Type> s_hashToType = new Dictionary<ulong, Type>();
+		private static readonly Dictionary<Type, ulong> s_typeToHash = new Dictionary<Type, ulong>();
 
 		private static ulong GetStableHash(string str)
 		{
@@ -220,40 +220,43 @@ namespace Massive.Serialization
 
 		public static void WriteType(this Stream stream, Type type)
 		{
-			if (!s_typeToBytes.TryGetValue(type, out var nameBuffer))
+			if (!s_typeToBytes.TryGetValue(type, out var nameBytes))
 			{
 				var typeName = type.AssemblyQualifiedName!;
-				nameBuffer = Encoding.UTF8.GetBytes(typeName);
-				s_typeToBytes[type] = nameBuffer;
+				nameBytes = Encoding.UTF8.GetBytes(typeName);
 				var hash = GetStableHash(typeName);
+				s_typeToBytes[type] = nameBytes;
 				s_hashToType[hash] = type;
 				s_typeToHash[type] = hash;
 			}
 
 			stream.WriteULong(s_typeToHash[type]);
-			WriteInt(stream, nameBuffer.Length);
-			stream.Write(nameBuffer);
+			WriteInt(stream, nameBytes.Length);
+			stream.Write(nameBytes);
 		}
 
 		public static Type ReadType(this Stream stream)
 		{
 			var hash = stream.ReadULong();
-			var nameLength = ReadInt(stream);
-			var nameBuffer = ArrayPool<byte>.Shared.Rent(nameLength);
+			var nameLength = stream.ReadInt();
+			var nameBytes = ArrayPool<byte>.Shared.Rent(nameLength);
 			try
 			{
-				ReadExactly(stream, nameBuffer);
+				ReadExactly(stream, new Span<byte>(nameBytes, 0, nameLength));
 				if (!s_hashToType.TryGetValue(hash, out var type))
 				{
-					var typeName = Encoding.UTF8.GetString(nameBuffer, 0, nameLength);
+					var typeName = Encoding.UTF8.GetString(nameBytes, 0, nameLength);
 					type = Type.GetType(typeName, true);
-					s_typeToBytes[type] = nameBuffer.ToArray();
+					s_typeToBytes[type] = nameBytes.ToArray();
 					s_hashToType[hash] = type;
 					s_typeToHash[type] = hash;
 				}
 				return type;
 			}
-			finally { ArrayPool<byte>.Shared.Return(nameBuffer); }
+			finally
+			{
+				ArrayPool<byte>.Shared.Return(nameBytes);
+			}
 		}
 
 		public static void ReadExactly(this Stream stream, Span<byte> buffer)
