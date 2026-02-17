@@ -32,4 +32,8 @@
         <None Remove="LICENSE.meta"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\..\massive-ecs\Runtime\Massive.csproj" />
+    </ItemGroup>
+
 </Project>
