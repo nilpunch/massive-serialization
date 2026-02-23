@@ -8,6 +8,8 @@ namespace Massive.Serialization
 	{
 		private readonly Dictionary<Type, IDataSerializer> _customSerializers = new Dictionary<Type, IDataSerializer>();
 
+		public ITypeSerializer TypeSerializer { get; set; } = AQNTypeSerializer.Instance;
+
 		public IDataSerializer DefaultUnmanagedSerializer { get; set; } = UnmanagedBinaryDataSerializer.Instance;
 
 		public IDataSerializer DefaultManagedSerializer { get; set; } =
@@ -33,7 +35,9 @@ namespace Massive.Serialization
 			{
 				var bitSet = world.Sets.LookupByComponentId[i];
 				var setType = world.Sets.TypeOf(bitSet);
-				stream.WriteType(setType);
+
+				TypeSerializer.Serialize(setType, stream);
+
 				stream.WriteBitSet(bitSet);
 
 				// Only IDataSet has serializable data.
@@ -74,7 +78,7 @@ namespace Massive.Serialization
 			var setCount = stream.ReadInt();
 			for (var i = 0; i < setCount; i++)
 			{
-				var setType = stream.ReadType();
+				var setType = TypeSerializer.Deserialize(stream);
 				var bitSet = world.Sets.GetReflected(setType);
 				stream.ReadBitSet(bitSet);
 

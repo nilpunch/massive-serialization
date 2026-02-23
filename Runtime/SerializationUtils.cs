@@ -1,10 +1,6 @@
 ﻿using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 
 // ReSharper disable MustUseReturnValue
 namespace Massive.Serialization
@@ -199,64 +195,6 @@ namespace Massive.Serialization
 			Span<byte> buffer = stackalloc byte[sizeof(bool)];
 			ReadExactly(stream, buffer);
 			return BitConverter.ToBoolean(buffer);
-		}
-
-		private static readonly Dictionary<Type, byte[]> s_typeToBytes = new Dictionary<Type, byte[]>();
-		private static readonly Dictionary<ulong, Type> s_hashToType = new Dictionary<ulong, Type>();
-		private static readonly Dictionary<Type, ulong> s_typeToHash = new Dictionary<Type, ulong>();
-
-		private static ulong GetStableHash(string str)
-		{
-			const ulong fnvOffset = 14695981039346656037;
-			const ulong fnvPrime = 1099511628211;
-			var hash = fnvOffset;
-			foreach (var c in str)
-			{
-				hash ^= c;
-				hash *= fnvPrime;
-			}
-			return hash;
-		}
-
-		public static void WriteType(this Stream stream, Type type)
-		{
-			if (!s_typeToBytes.TryGetValue(type, out var nameBytes))
-			{
-				var typeName = type.AssemblyQualifiedName!;
-				nameBytes = Encoding.UTF8.GetBytes(typeName);
-				var hash = GetStableHash(typeName);
-				s_typeToBytes[type] = nameBytes;
-				s_hashToType[hash] = type;
-				s_typeToHash[type] = hash;
-			}
-
-			stream.WriteULong(s_typeToHash[type]);
-			WriteInt(stream, nameBytes.Length);
-			stream.Write(nameBytes);
-		}
-
-		public static Type ReadType(this Stream stream)
-		{
-			var hash = stream.ReadULong();
-			var nameLength = stream.ReadInt();
-			var nameBytes = ArrayPool<byte>.Shared.Rent(nameLength);
-			try
-			{
-				ReadExactly(stream, new Span<byte>(nameBytes, 0, nameLength));
-				if (!s_hashToType.TryGetValue(hash, out var type))
-				{
-					var typeName = Encoding.UTF8.GetString(nameBytes, 0, nameLength);
-					type = Type.GetType(typeName, true);
-					s_typeToBytes[type] = nameBytes.ToArray();
-					s_hashToType[hash] = type;
-					s_typeToHash[type] = hash;
-				}
-				return type;
-			}
-			finally
-			{
-				ArrayPool<byte>.Shared.Return(nameBytes);
-			}
 		}
 
 		public static void ReadExactly(this Stream stream, Span<byte> buffer)
